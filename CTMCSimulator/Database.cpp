@@ -1,4 +1,5 @@
 #include "PCH.h"
+#if 0
 #include "Database.h"
 
 #include "mysql_connection.h"
@@ -72,3 +73,5 @@ namespace CTMCS
         return result->getUInt64(1);
     }
 }
+
+#endif

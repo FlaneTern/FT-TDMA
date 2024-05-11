@@ -7,7 +7,7 @@ int main()
 {
 	CTMCS::SimulationParameters siParams;
 	siParams.SNCount = 5;
-	siParams.MaxLevel = 4;
+	siParams.MaxLevel = 3;
 	siParams.MaxSimulationTime = 1000;
 	siParams.RecoveryTime = 30;
 	siParams.TransferTime = 60;
