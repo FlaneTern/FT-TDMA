@@ -1,11 +1,6 @@
 #include "PCH.h"
 #include "Simulation.h"
 
-#include <iostream>
-#include <vector>
-#include <random>
-#include <chrono>
-#include <limits>
 
 
 int main()

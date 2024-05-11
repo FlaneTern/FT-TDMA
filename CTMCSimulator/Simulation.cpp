@@ -6,6 +6,43 @@ namespace CTMCS
 {
 	static std::mt19937_64 s_Random = std::mt19937_64(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
+
+	IterationSRP::IterationSRP(const SimulationRunParameters& srp)
+		: Done(false), BigDeltaLevelCurrent(srp.BigDeltaLevelStart), BigLambdaCurrent(srp.BigLambdaStart)
+	{
+		if (BigLambdaCurrent > srp.BigLambdaEnd)
+			throw std::runtime_error("BigLambdaStart " + std::to_string(BigLambdaCurrent) + " is bigger than BigLambdaEnd " + std::to_string(srp.BigLambdaEnd) + " !");
+		
+		for(int i = 0; i < BigDeltaLevelCurrent.size(); i++)
+			if(BigDeltaLevelCurrent[i] > srp.BigDeltaLevelEnd[i])
+				throw std::runtime_error("BigDeltaLevelCurrent " + std::to_string(i) + " " + std::to_string(BigLambdaCurrent) + " is bigger than BigLambdaEnd " + std::to_string(srp.BigLambdaEnd) + " !");
+	}
+
+	IterationSRP::IterationSRP(const IterationSRP& previous, const SimulationRunParameters& srp)
+		: Done(false), BigDeltaLevelCurrent(previous.BigDeltaLevelCurrent), BigLambdaCurrent(previous.BigLambdaCurrent)
+	{
+		BigDeltaLevelCurrent[BigDeltaLevelCurrent.size() - 1] += srp.BigDeltaLevelStride[BigDeltaLevelCurrent.size() - 1];
+		for (int i = BigDeltaLevelCurrent.size() - 1; i >= 0; i--)
+		{
+			if (BigDeltaLevelCurrent[i] > srp.BigDeltaLevelEnd[i])
+			{
+				if (i != 0)
+				{
+					BigDeltaLevelCurrent[i - 1] += srp.BigDeltaLevelStride[i - 1];
+					BigDeltaLevelCurrent[i] = srp.BigDeltaLevelStart[i];
+				}
+				else
+				{
+					BigLambdaCurrent += srp.BigLambdaStride;
+					if (BigLambdaCurrent <= srp.BigLambdaEnd)
+						BigDeltaLevelCurrent = srp.BigDeltaLevelStart;
+					else
+						Done = true;
+				}
+			}
+		}
+	}
+
 	Simulation::Simulation(SimulationParameters simulationParameters)
 	{
 		m_SimulationParameters = simulationParameters;
@@ -57,15 +94,14 @@ namespace CTMCS
 	void Simulation::Run(SimulationRunParameters simulationRunParameters)
 	{
 		
-		bool done = false;
 		int runIterator = 0;
 
-		double bigLambdaCurrent = simulationRunParameters.BigLambdaStart;
-		std::vector<double> bigDeltaLevelCurrent = simulationRunParameters.BigDeltaLevelStart;
+		IterationSRP isrp(simulationRunParameters);
+
 
 		auto SNs = m_SensorNodes;
 
-		while (!done)
+		while (!isrp.Done)
 		{
 			CTMCParameters CTMCParams;
 			SimulationResults simulationResults;
@@ -74,7 +110,7 @@ namespace CTMCS
 			{
 				CTMCParams.Tau.push_back(1.0 / m_SimulationParameters.TransferTime);
 				CTMCParams.Lambda.push_back(1.0 / simulationRunParameters.BigLambdaStart);
-				CTMCParams.Delta.push_back(1.0 / bigDeltaLevelCurrent[i]);
+				CTMCParams.Delta.push_back(1.0 / isrp.BigDeltaLevelCurrent[i]);
 				CTMCParams.Mu.push_back(1.0 / (m_SimulationParameters.RecoveryTime + 1.0 / (2 * CTMCParams.Delta.back())));
 			}
 			for (int i = 0; i < SNs.size(); i++)
@@ -248,10 +284,10 @@ namespace CTMCS
 			//	std::cout << '\n';
 			//}
 
-			std::cout << "BigLambda = " << bigLambdaCurrent << '\n';
-			std::cout << "BigDelta = ( " << bigDeltaLevelCurrent[0];
-			for (int i = 1; i < bigDeltaLevelCurrent.size(); i++)
-				std::cout << ", " << bigDeltaLevelCurrent[i];
+			std::cout << "BigLambda = " << isrp.BigLambdaCurrent << '\n';
+			std::cout << "BigDelta = ( " << isrp.BigDeltaLevelCurrent[0];
+			for (int i = 1; i < isrp.BigDeltaLevelCurrent.size(); i++)
+				std::cout << ", " << isrp.BigDeltaLevelCurrent[i];
 			std::cout << " )\n";
 			//for (int i = 0; i < timeSpentInState.size(); i++)
 			//	std::cout << "Time spent in state " << i << " = " << timeSpentInState[i] << '\n';
@@ -261,6 +297,10 @@ namespace CTMCS
 
 
 			// saving
+
+
+			// i dont know what to do with this
+#if 0
 			m_CTMCParameters.push_back(CTMCParams);
 			m_TransitionRateMatrices.push_back(TransitionRateMatrix);
 			m_StateTimes.push_back(timeSpentInState);
@@ -272,30 +312,9 @@ namespace CTMCS
 			m_StateTimes.clear();
 			m_SimulationResults.clear();
 
+#endif
 
-			bigDeltaLevelCurrent[bigDeltaLevelCurrent.size() - 1] += simulationRunParameters.BigDeltaLevelStride[bigDeltaLevelCurrent.size() - 1];
-			for (int i = bigDeltaLevelCurrent.size() - 1; i >= 0; i--)
-			{
-				if (bigDeltaLevelCurrent[i] > simulationRunParameters.BigDeltaLevelEnd[i])
-				{
-					if (i != 0)
-					{
-						bigDeltaLevelCurrent[i - 1] += simulationRunParameters.BigDeltaLevelStride[i - 1];
-						bigDeltaLevelCurrent[i] = simulationRunParameters.BigDeltaLevelStart[i];
-					}
-					else
-					{
-						bigLambdaCurrent += simulationRunParameters.BigLambdaStride;
-						if(bigLambdaCurrent <= simulationRunParameters.BigLambdaEnd)
-							bigDeltaLevelCurrent = simulationRunParameters.BigDeltaLevelStart;
-						else
-							done = true;
-					}
-				}
-			}
-
-
-
+			isrp = IterationSRP(isrp, simulationRunParameters);
 		}
 	}
 }

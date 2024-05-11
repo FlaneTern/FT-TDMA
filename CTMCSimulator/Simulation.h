@@ -23,6 +23,15 @@ namespace CTMCS
 		double BigLambdaStride;
 	};
 
+	struct IterationSRP
+	{
+		IterationSRP(const SimulationRunParameters& srp);
+		IterationSRP(const IterationSRP& previous, const SimulationRunParameters& srp);
+		bool Done;
+		std::vector<double> BigDeltaLevelCurrent;
+		double BigLambdaCurrent;
+	};
+
 	struct SimulationParameters
 	{
 		double TransferTime = -1;

@@ -11,8 +11,8 @@ namespace CTMCS
 
 	struct SensorNode
 	{
-		int Parent = -1;
-		int Level = -1;
+		int64_t Parent = -1;
+		uint64_t Level = 0;
 		double CurrentDataSize = 0.0;
 	};
 }
