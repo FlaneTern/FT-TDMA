@@ -43,10 +43,11 @@ create table CTMCParameter(
 
 create table StateTime(
 	SimulationID bigint unsigned not null,
+    ResultID bigint unsigned not null,
     State bigint unsigned not null,
 	Time_ double,
-    primary key(SimulationID, State),
-    foreign key(SimulationID) references Simulation(SimulationID)
+    primary key(SimulationID, ResultID, State),
+    foreign key(SimulationID, ResultID) references Result(SimulationID, ResultID)
 );
 
 create table TransitionRateMatrix(
@@ -63,4 +64,5 @@ create table TransitionRateMatrix(
 insert into Simulation values(0, 0, 0, 0, 0, 0);
 
 select * from Simulation;
+select * from StateTime;
 

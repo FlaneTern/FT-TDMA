@@ -2,6 +2,8 @@
 
 #include "Simulation.h"
 
+#include "Database.h"
+
 namespace CTMCS
 {
 	static std::mt19937_64 s_Random = std::mt19937_64(std::chrono::high_resolution_clock::now().time_since_epoch().count());
@@ -45,6 +47,11 @@ namespace CTMCS
 
 	Simulation::Simulation(SimulationParameters simulationParameters)
 	{
+		static uint64_t currentSimulationID = Database::GetDatabase()->GetLatestSimulationID();
+
+		currentSimulationID++;
+		m_SimulationID = currentSimulationID;
+
 		m_SimulationParameters = simulationParameters;
 
 
@@ -88,6 +95,10 @@ namespace CTMCS
 
 			m_IndividualStates.push_back(individualStatesCurrent);
 		}
+
+
+		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes);
+		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters);
 	}
 
 	void Simulation::Run(SimulationRunParameters simulationRunParameters)
@@ -97,13 +108,14 @@ namespace CTMCS
 
 		IterationSRP isrp(simulationRunParameters);
 
-
+		uint64_t resultID = 0;
 		while (!isrp.Done)
 		{
 			cs.acquire();
-			std::thread th(&Simulation::InnerRun, this, isrp, &cs);
+			std::thread th(&Simulation::InnerRun, this, resultID, isrp, &cs);
 			th.detach();
 			isrp = IterationSRP(isrp, simulationRunParameters);
+			resultID++;
 		}
 
 		for (int i = 0; i < s_MaxThreadCount; i++)
@@ -111,7 +123,7 @@ namespace CTMCS
 	}
 
 
-	void Simulation::InnerRun(IterationSRP isrp, std::counting_semaphore<s_MaxThreadCount>* cs)
+	void Simulation::InnerRun(uint64_t resultID, IterationSRP isrp, std::counting_semaphore<s_MaxThreadCount>* cs)
 	{
 		auto SNs = m_SensorNodes;
 
@@ -152,15 +164,15 @@ namespace CTMCS
 				{
 					if (individualStatesFrom[k] == individualStatesTo[k])
 						continue;
-					//else if (individualStatesTo[k] == Transfer && individualStatesTo[SNs[k].Parent] == Recovery)
+					//else if (individualStatesTo[k] == (int)WorkingState::Transfer && individualStatesTo[SNs[k].Parent] == (int)WorkingState::Recovery)
 					//	rateIsZero = true;
-					else if (individualStatesFrom[k] == Collection && individualStatesTo[k] == Transfer)
+					else if (individualStatesFrom[k] == (int)WorkingState::Collection && individualStatesTo[k] == (int)WorkingState::Transfer)
 						rate *= CTMCParams.Delta[SNs[k].Level];
-					else if (individualStatesFrom[k] == Collection && individualStatesTo[k] == Recovery)
+					else if (individualStatesFrom[k] == (int)WorkingState::Collection && individualStatesTo[k] == (int)WorkingState::Recovery)
 						rate *= CTMCParams.Lambda[SNs[k].Level];
-					else if (individualStatesFrom[k] == Transfer && individualStatesTo[k] == Collection)
+					else if (individualStatesFrom[k] == (int)WorkingState::Transfer && individualStatesTo[k] == (int)WorkingState::Collection)
 						rate *= CTMCParams.Tau[SNs[k].Level];
-					else if (individualStatesFrom[k] == Recovery && individualStatesTo[k] == Collection)
+					else if (individualStatesFrom[k] == (int)WorkingState::Recovery && individualStatesTo[k] == (int)WorkingState::Collection)
 						rate *= CTMCParams.Mu[SNs[k].Level];
 					else
 						rateIsZero = true;
@@ -227,29 +239,29 @@ namespace CTMCS
 			{
 
 				// TO DO !!!
-				if (individualStatesFrom[i] == Collection && individualStatesTo[i] == Collection)
+				if (individualStatesFrom[i] == (int)WorkingState::Collection && individualStatesTo[i] == (int)WorkingState::Collection)
 					SNs[i].CurrentDataSize += minimumTime;
-				else if (individualStatesFrom[i] == Collection && individualStatesTo[i] == Transfer)
+				else if (individualStatesFrom[i] == (int)WorkingState::Collection && individualStatesTo[i] == (int)WorkingState::Transfer)
 					SNs[i].CurrentDataSize += minimumTime;
-				else if (individualStatesFrom[i] == Collection && individualStatesTo[i] == Recovery)
+				else if (individualStatesFrom[i] == (int)WorkingState::Collection && individualStatesTo[i] == (int)WorkingState::Recovery)
 				{
 					SNs[i].CurrentDataSize = 0.0;
 					for (int j = 0; j < SNs.size(); j++)
 					{
 						if (i == j)
 							continue;
-						if (SNs[j].Parent == i && individualStatesFrom[j] == Transfer)
+						if (SNs[j].Parent == i && individualStatesFrom[j] == (int)WorkingState::Transfer)
 						{
-							SNs[j].CurrentDataSize = 0; // DANGER : PARTIAL DATA TRANSFER FAILS
-							// HANDLE TURNING CHILDREN TO Collection IF FAILED  !!!!!!!!!!!
-							//if(individualStatesTo[j] == Transfer)
+							SNs[j].CurrentDataSize = 0; // DANGER : PARTIAL DATA (int)WorkingState::Transfer FAILS
+							// HANDLE TURNING CHILDREN TO (int)WorkingState::Collection IF FAILED  !!!!!!!!!!!
+							//if(individualStatesTo[j] == (int)WorkingState::Transfer)
 							//	nextState -= std::pow(3, j) * 2;
 						}
 					}
 
 
 				}
-				else if (individualStatesFrom[i] == Transfer && individualStatesTo[i] == Collection)
+				else if (individualStatesFrom[i] == (int)WorkingState::Transfer && individualStatesTo[i] == (int)WorkingState::Collection)
 				{
 					if (SNs[i].Parent != -1)
 						SNs[SNs[i].Parent].CurrentDataSize += SNs[i].CurrentDataSize;
@@ -257,11 +269,11 @@ namespace CTMCS
 						simulationResults.TotalDataSentToBS += SNs[i].CurrentDataSize;
 					SNs[i].CurrentDataSize = 0.0;
 				}
-				else if (individualStatesFrom[i] == Transfer && individualStatesTo[i] == Transfer) {} // DANGER : PARTIAL DATA TRANSFER FAILS
-				else if (individualStatesFrom[i] == Transfer && individualStatesTo[i] == Recovery) {} // not possible
-				else if (individualStatesFrom[i] == Recovery && individualStatesTo[i] == Collection) {} // doesnt do anything
-				else if (individualStatesFrom[i] == Recovery && individualStatesTo[i] == Transfer) {} // not possible
-				else if (individualStatesFrom[i] == Recovery && individualStatesTo[i] == Recovery) {} // doesnt do anything
+				else if (individualStatesFrom[i] == (int)WorkingState::Transfer && individualStatesTo[i] == (int)WorkingState::Transfer) {} // DANGER : PARTIAL DATA (int)WorkingState::Transfer FAILS
+				else if (individualStatesFrom[i] == (int)WorkingState::Transfer && individualStatesTo[i] == (int)WorkingState::Recovery) {} // not possible
+				else if (individualStatesFrom[i] == (int)WorkingState::Recovery && individualStatesTo[i] == (int)WorkingState::Collection) {} // doesnt do anything
+				else if (individualStatesFrom[i] == (int)WorkingState::Recovery && individualStatesTo[i] == (int)WorkingState::Transfer) {} // not possible
+				else if (individualStatesFrom[i] == (int)WorkingState::Recovery && individualStatesTo[i] == (int)WorkingState::Recovery) {} // doesnt do anything
 
 
 
@@ -309,7 +321,10 @@ namespace CTMCS
 
 
 		// saving
-
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, CTMCParams);
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, simulationResults);
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, timeSpentInState);
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, TransitionRateMatrix);
 
 		// i dont know what to do with this
 #if 0

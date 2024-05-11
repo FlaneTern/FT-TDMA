@@ -2,12 +2,14 @@
 
 namespace CTMCS
 {
-	enum State
+	enum class WorkingState
 	{
 		Collection = 0,
 		Transfer,
 		Recovery
 	};
+
+	std::string WorkingStateToString(const WorkingState& ws);
 
 	struct SensorNode
 	{
