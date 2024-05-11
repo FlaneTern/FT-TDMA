@@ -1,4 +1,5 @@
-#include "WSNPCH.h"
+#if 0
+#include "CTMCSPCH.h"
 #include "Database.h"
 
 #include "mysql_connection.h"
@@ -52,17 +53,130 @@ namespace WSN
         {
             s_Driver = get_driver_instance();
             s_Connection = s_Driver->connect(c_Server, c_Username, c_Password);
-            s_Connection->setSchema(c_DatabaseName);
         }
         catch (sql::SQLException e)
         {
-            std::cout << "Could not connect to server. Error message: " + std::string(e.what()) << '\n';
             throw std::runtime_error("Could not connect to server. Error message: " + std::string(e.what()));
         }
 
+        s_Connection->setSchema(c_DatabaseName);
 
 	}
 
+#if 0
+
+    void Database::Insert(uint64_t simulationID, const SimulationParameters& simulationParameters)
+    {
+        
+        try
+        {
+            static sql::PreparedStatement* statement = s_Connection->prepareStatement("Insert into \
+                        Simulation(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime) values(?, ?, ?, ?)");
+            
+            std::cout << "Inserting Simulation " << simulationID << '\n';
+
+            statement->setUInt64(1, simulationID);
+            statement->setDouble(2, simulationParameters.TotalDurationToBeTransferred);
+            statement->setDouble(3, simulationParameters.TransferTime);
+            statement->setDouble(4, simulationParameters.RecoveryTime);
+            statement->execute();
+        }
+        catch (sql::SQLException& e)
+        {
+            throw std::runtime_error("SQL Error in Insert SDD. Error message: " + std::string(e.what()));
+        }
+    }
+
+    void Database::Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes)
+    {
+
+    }
+
+    void Database::Insert(uint64_t simulationID, const std::vector<Distribution>& dists, const std::vector<SimulationDistributionData>& sdd)
+    {
+        if (dists.size() != sdd.size())
+            throw std::runtime_error("Dists size is not equal to sdd size in Database::Insert !");
+
+        try
+        {
+            static sql::PreparedStatement* statement1 = s_Connection->prepareStatement("Insert into \
+                        SimulationDistribution(SimulationID, SimulationDistributionID, DistributionType, Mean, Stddev, Parameter1, Parameter2) \
+                        values(?, ?, ?, ?, ?, ?, ?)");
+
+            static sql::PreparedStatement* statement2 = s_Connection->prepareStatement("Insert into \
+                        FailureTimestamp(SimulationID, SimulationDistributionID, FailureNumber, Timestamp_) \
+                        values(?, ?, ?, ?)");
+
+            static sql::PreparedStatement* statement3 = s_Connection->prepareStatement("Insert into \
+                        SimulationResult(SimulationID, SimulationDistributionID, SimulationAttemptID, Delta, CollectionTime, WastedTime, ActualTotalDuration, FinalFailureIndex) \
+                        values(?, ?, ?, ?, ?, ?, ?, ?)");
+
+            static sql::PreparedStatement* statement4 = s_Connection->prepareStatement("Insert into \
+                        SimulationInterval(SimulationID, SimulationDistributionID, SimulationAttemptID, IntervalNumber, State, StartTime, EndTime) \
+                        values(?, ?, ?, ?, ?, ?, ?)");
+
+            for (int i = 0; i < dists.size(); i++)
+            {
+                std::cout << "Inserting SimulationDistribution " << simulationID << ", " << i <<  '\n';
+                statement1->setUInt64(1, simulationID);
+                statement1->setUInt64(2, i);
+                statement1->setString(3, DistributionTypeToString(dists[i].m_DistributionType));
+                statement1->setDouble(4, dists[i].m_Mean);
+                statement1->setDouble(5, dists[i].m_Stddev);
+                statement1->setDouble(6, dists[i].m_Parameter1);
+                statement1->setDouble(7, dists[i].m_Parameter2);
+                statement1->execute();
+
+                for (int j = 0; j < sdd[i].FailureTimestamps.size() && j < sdd[i].SRD[j].FinalFailureIndex; j++)
+                {   
+                    std::cout << "Inserting FailureTimestamp " << simulationID << ", " << i << ", " << j << '\n';
+
+                    statement2->setUInt64(1, simulationID);
+                    statement2->setUInt64(2, i);
+                    statement2->setUInt64(3, j);
+                    statement2->setUInt64(4, sdd[i].FailureTimestamps[j]);
+                    statement2->execute();
+                }
+
+                for (int j = 0; j < sdd[i].SRD.size(); j++)
+                {
+                    std::cout << "Inserting SimulationResult " << simulationID << ", " << i << ", " << j << '\n';
+
+                    auto& srd = sdd[i].SRD[j];
+                    statement3->setUInt64(1, simulationID);
+                    statement3->setUInt64(2, i);
+                    statement3->setUInt64(3, j);
+                    statement3->setDouble(4, srd.Delta);
+                    statement3->setDouble(5, srd.CollectionTime);
+                    statement3->setDouble(6, srd.WastedTime);
+                    statement3->setDouble(7, srd.ActualTotalDuration);
+                    statement3->setUInt64(8, srd.FinalFailureIndex);
+                    statement3->execute();
+
+                    for (int k = 0; k < srd.SimulationIntervals.size(); k++)
+                    {
+                        std::cout << "Inserting SimulationInterval " << simulationID << ", " << i << ", " << j << ", " << k << '\n';
+                        
+                        statement4->setUInt64(1, simulationID);
+                        statement4->setUInt64(2, i);
+                        statement4->setUInt64(3, j);
+                        statement4->setUInt64(4, k);
+                        statement4->setString(5, WorkingStateToString(srd.SimulationIntervals[k].State));
+                        statement4->setDouble(6, srd.SimulationIntervals[k].StartTime);
+                        statement4->setDouble(7, srd.SimulationIntervals[k].EndTime);
+                        statement4->execute();
+                    }
+
+                }
+            }
+
+        }
+        catch (sql::SQLException& e)
+        {
+            throw std::runtime_error("SQL Error in Insert SDD. Error message: " + std::string(e.what()));
+        }
+    }
+#else
 void Database::Insert(uint64_t simulationID, const SimulationParameters& simulationParameters)
 {
     std::cout << "Inserting Simulation " << simulationID << '\n';
@@ -119,6 +233,26 @@ void Database::Insert(uint64_t simulationID, const std::vector<Distribution>& di
             "SimulationInterval(SimulationID, SimulationDistributionID, SimulationAttemptID, IntervalNumber, State, StartTime, EndTime)" +
             CreateInsertString(7, c_BatchRowCount));
 
+#if 0
+        for (int i = 0; i < dists.size(); i += c_BatchRowCount)
+        {
+            std::cout << "Inserting SimulationDistribution " << simulationID << ", " << i << '\n';
+            for (int batchRow = 0; batchRow < c_BatchRowCount && batchRow + i < dists.size(); batchRow++)
+            {
+                statement1->setUInt64(batchRow * 7 + 1, simulationID);
+                statement1->setUInt64(batchRow * 7 + 2, batchRow + i);
+                statement1->setString(batchRow * 7 + 3, DistributionTypeToString(dists[batchRow + i].m_DistributionType));
+                statement1->setDouble(batchRow * 7 + 4, dists[batchRow + i].m_Mean);
+                statement1->setDouble(batchRow * 7 + 5, dists[batchRow + i].m_Stddev);
+                statement1->setDouble(batchRow * 7 + 6, dists[batchRow + i].m_Parameter1);
+                statement1->setDouble(batchRow * 7 + 7, dists[batchRow + i].m_Parameter2);
+            }
+
+            statement1->execute();
+            statement1->clearAttributes();
+            statement1->clearParameters();
+        }
+#endif
 
         {
             bool done = false;
@@ -338,6 +472,8 @@ void Database::Insert(uint64_t simulationID, const std::vector<Distribution>& di
     }
 }
 
+#endif
+
 
     uint64_t Database::GetLatestSimulationID()
     {
@@ -348,3 +484,4 @@ void Database::Insert(uint64_t simulationID, const std::vector<Distribution>& di
         return result->getUInt64(1);
     }
 }
+#endif
