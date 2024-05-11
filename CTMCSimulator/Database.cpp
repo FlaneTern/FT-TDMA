@@ -6,13 +6,13 @@
 #include <cppconn/exception.h>
 #include <cppconn/prepared_statement.h>
 
-namespace WSN
+namespace CTMCS
 {
     // CONSTANTS
     static constexpr char c_Server[] = "tcp://127.0.0.1:3306\0";
     static constexpr char c_Username[] = "WSN\0";
     static constexpr char c_Password[] = "wsn123\0";
-    static constexpr char c_DatabaseName[] = "WSN\0";
+    static constexpr char c_DatabaseName[] = "CTMCS\0";
 
 
 	// A LOT OF UNFREED STUFF such as driver, connection, and statements. Maybe free these?
