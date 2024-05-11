@@ -1,4 +1,3 @@
-#if 0
 #pragma once
 
 namespace WSN
@@ -21,4 +20,3 @@ namespace WSN
 	};
 }
 
-#endif

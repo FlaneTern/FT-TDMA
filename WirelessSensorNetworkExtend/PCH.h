@@ -11,3 +11,4 @@
 #include <stdexcept>
 #include <map>
 #include <memory>
+#include <sstream>
