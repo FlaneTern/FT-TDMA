@@ -64,5 +64,10 @@ create table TransitionRateMatrix(
 insert into Simulation values(0, 0, 0, 0, 0, 0);
 
 select * from Simulation;
+select * from SensorNode;
+select * from Result;
+select * from CTMCParameter;
 select * from StateTime;
+select * from TransitionRateMatrix;
+
 

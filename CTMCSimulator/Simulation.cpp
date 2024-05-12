@@ -96,15 +96,58 @@ namespace CTMCS
 			m_IndividualStates.push_back(individualStatesCurrent);
 		}
 
-
-		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes);
+		// SIMULATIONPARAMS MUST BE INSERTED FIRST !!!
 		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters);
+		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes);
 	}
 
 	void Simulation::Run(SimulationRunParameters simulationRunParameters)
 	{
 		std::counting_semaphore<s_MaxThreadCount> cs(s_MaxThreadCount);
 
+		std::binary_semaphore isDone(1);
+		isDone.acquire();
+
+		std::thread insertionThread([&]()
+			{
+				auto insertFunction = [&]()
+				{
+					Database::GetInsertionMutex()->lock();
+
+					if (m_ResultIDs.size() == 0)
+					{
+						Database::GetInsertionMutex()->unlock();
+						return;
+					}
+
+					auto resultIDs = m_ResultIDs;
+					auto simulationResults = m_SimulationResults;
+					auto CTMCParams = m_CTMCParameters;
+					auto timeSpentInState = m_StateTimes;
+					//auto TransitionRateMatrices = m_TransitionRateMatrices;
+
+					m_ResultIDs.clear();
+					m_SimulationResults.clear();
+					m_CTMCParameters.clear();
+					m_StateTimes.clear();
+					//m_TransitionRateMatrices.clear();
+
+					Database::GetInsertionMutex()->unlock();
+
+					// saving
+					// RESULTS MUST BE LOGGED FIST !!!
+					Database::GetDatabase()->Insert(m_SimulationID, resultIDs, simulationResults);
+					Database::GetDatabase()->Insert(m_SimulationID, resultIDs, CTMCParams);
+					Database::GetDatabase()->Insert(m_SimulationID, resultIDs, timeSpentInState);
+					//Database::GetDatabase()->Insert(m_SimulationID, resultID, TransitionRateMatrices);
+
+					std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+				};
+
+				while (!isDone.try_acquire())
+					insertFunction();
+				insertFunction();
+			});
 
 		IterationSRP isrp(simulationRunParameters);
 
@@ -120,6 +163,9 @@ namespace CTMCS
 
 		for (int i = 0; i < s_MaxThreadCount; i++)
 			cs.acquire();
+
+		isDone.release();
+		insertionThread.join();
 	}
 
 
@@ -319,19 +365,23 @@ namespace CTMCS
 		std::cout << "Total data sent to BS = " << simulationResults.TotalDataSentToBS << '\n';
 		std::cout << "-------------------------------------------------------\n";
 
-
-		// saving
-		Database::GetDatabase()->Insert(m_SimulationID, resultID, CTMCParams);
-		Database::GetDatabase()->Insert(m_SimulationID, resultID, simulationResults);
-		Database::GetDatabase()->Insert(m_SimulationID, resultID, timeSpentInState);
-		Database::GetDatabase()->Insert(m_SimulationID, resultID, TransitionRateMatrix);
-
 		// i dont know what to do with this
-#if 0
+
+		Database::GetInsertionMutex()->lock();
+		m_ResultIDs.push_back(resultID);
 		m_CTMCParameters.push_back(CTMCParams);
-		m_TransitionRateMatrices.push_back(TransitionRateMatrix);
+		//m_TransitionRateMatrices.push_back(TransitionRateMatrix);
 		m_StateTimes.push_back(timeSpentInState);
 		m_SimulationResults.push_back(simulationResults);
+		Database::GetInsertionMutex()->unlock();
+
+#if 0
+		// saving
+		// RESULTS MUST BE LOGGED FIST !!!
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, simulationResults);
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, CTMCParams);
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, timeSpentInState);
+		Database::GetDatabase()->Insert(m_SimulationID, resultID, TransitionRateMatrix);
 
 		// TEMPORARILY CLEAR
 		m_CTMCParameters.clear();

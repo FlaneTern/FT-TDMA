@@ -9,13 +9,14 @@ namespace CTMCS
 		Database(const Database&) = delete;
 
 		inline static Database* GetDatabase() { return s_DatabaseInstance; }
+		inline static std::mutex* GetInsertionMutex() { return s_InsertionMutex; }
 
 		void Insert(uint64_t simulationID, const SimulationParameters& sp);
 		void Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes);
-		void Insert(uint64_t simulationID, uint64_t resultID, const CTMCParameters& ctmcParams);
-		void Insert(uint64_t simulationID, uint64_t resultID, const SimulationResults& sr);
-		void Insert(uint64_t simulationID, uint64_t resultID, const std::vector<double>& stateTime);
-		void Insert(uint64_t simulationID, uint64_t resultID, const std::vector<std::vector<double>>& transitionRateMatrix);
+		void Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<CTMCParameters>& ctmcParams);
+		void Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<SimulationResults>& sr);
+		void Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<std::vector<double>>& stateTime);
+		void Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<std::vector<std::vector<double>>>& transitionRateMatrix);
 
 		uint64_t GetLatestSimulationID();
 
@@ -23,6 +24,8 @@ namespace CTMCS
 		Database();
 
 		static Database* s_DatabaseInstance;
+
+		static std::mutex* s_InsertionMutex;
 	};
 }
 

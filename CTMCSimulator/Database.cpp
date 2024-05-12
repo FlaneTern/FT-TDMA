@@ -14,16 +14,17 @@ namespace CTMCS
     static constexpr char c_Password[] = "wsn123\0";
     static constexpr char c_DatabaseName[] = "CTMCS\0";
 
-
 	// A LOT OF UNFREED STUFF such as driver, connection, and statements. Maybe free these?
     // Doesn't matter tbh
 
 	Database* Database::s_DatabaseInstance = new Database();
+    std::mutex* Database::s_InsertionMutex = new std::mutex;
 
 	static sql::Driver* s_Driver;
 	static sql::Connection* s_Connection;
 
-    static constexpr uint32_t c_BatchRowCount = 50000 / 8;
+    static constexpr uint32_t c_BatchRowCount = 50000 / 20;
+
 
     static std::string CreateInsertString(uint32_t argumentCount, uint32_t rowCount)
     {
@@ -84,43 +85,25 @@ namespace CTMCS
     {
         try
         {
-            static std::vector<BinarySemaphoreWrapper> bs(s_MaxThreadCount);
-            static std::vector<sql::PreparedStatement*> preparedStatements(s_MaxThreadCount, s_Connection->prepareStatement(
+            static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
                 "Simulation(SimulationID, TransferTime, RecoveryTime, MaxSimulationTime, SNCount, MaxLevel)"
-                " values(?,?,?,?,?,?)"));
+                " values(?,?,?,?,?,?)");
 
-            bool inserted = false;
-            while (!inserted)
-            {
-                int iterator = -1;
-                for (int i = 0; i < bs.size(); i++)
-                {
-                    if (bs[i].Semaphore.try_acquire())
-                    {
-                        iterator = i;
-                        break;
-                    }
-                }
 
-                if (iterator != -1)
-                {
-                    preparedStatements[iterator]->setUInt64(1, simulationID);
-                    preparedStatements[iterator]->setDouble(2, sp.TransferTime);
-                    preparedStatements[iterator]->setDouble(3, sp.RecoveryTime);
-                    preparedStatements[iterator]->setDouble(4, sp.MaxSimulationTime);
-                    preparedStatements[iterator]->setUInt64(5, sp.SNCount);
-                    preparedStatements[iterator]->setUInt64(6, sp.MaxLevel);
+            preparedStatement->setUInt64(1, simulationID);
+            preparedStatement->setDouble(2, sp.TransferTime);
+            preparedStatement->setDouble(3, sp.RecoveryTime);
+            preparedStatement->setDouble(4, sp.MaxSimulationTime);
+            preparedStatement->setUInt64(5, sp.SNCount);
+            preparedStatement->setUInt64(6, sp.MaxLevel);
 
-                    preparedStatements[iterator]->execute();
-                    preparedStatements[iterator]->clearAttributes();
-                    preparedStatements[iterator]->clearParameters();
-                    s_Connection->commit();
 
-                    bs[iterator].Semaphore.release();
-                    inserted = true;
-                }
-            }
+            preparedStatement->execute();
+            preparedStatement->clearAttributes();
+            preparedStatement->clearParameters();
+            s_Connection->commit();
+
         }
         catch (sql::SQLException& e)
         {
@@ -133,44 +116,27 @@ namespace CTMCS
     {
         try
         {
-            static std::vector<BinarySemaphoreWrapper> bs(s_MaxThreadCount);
-            static std::vector<sql::PreparedStatement*> preparedStatements(s_MaxThreadCount, s_Connection->prepareStatement(
+            static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
                 "SensorNode(SimulationID, SensorNodeID, Parent, Level_)" + 
-                CreateInsertString(4, sensorNodes.size())));  // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR SNCOUNT!
+                CreateInsertString(4, sensorNodes.size()));  // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR SNCOUNT!
 
-            bool inserted = false;
-            while (!inserted)
+
+
+            for (int i = 0; i < sensorNodes.size(); i++)
             {
-                int iterator = -1;
-                for (int i = 0; i < bs.size(); i++)
-                {
-                    if (bs[i].Semaphore.try_acquire())
-                    {
-                        iterator = i;
-                        break;
-                    }
-                }
-
-                if (iterator != -1)
-                {
-                    for (int i = 0; i < sensorNodes.size(); i++)
-                    {
-                        preparedStatements[iterator]->setUInt64(i * 4 + 1, simulationID);
-                        preparedStatements[iterator]->setUInt64(i * 4 + 2, i);
-                        preparedStatements[iterator]->setInt64(i * 4 + 3, sensorNodes[i].Parent);
-                        preparedStatements[iterator]->setUInt64(i * 4 + 4, sensorNodes[i].Level);
-                    }
-
-                    preparedStatements[iterator]->execute();
-                    preparedStatements[iterator]->clearAttributes();
-                    preparedStatements[iterator]->clearParameters();
-                    s_Connection->commit();
-
-                    bs[iterator].Semaphore.release();
-                    inserted = true;
-                }
+                preparedStatement->setUInt64(i * 4 + 1, simulationID);
+                preparedStatement->setUInt64(i * 4 + 2, i);
+                preparedStatement->setInt64(i * 4 + 3, sensorNodes[i].Parent);
+                preparedStatement->setUInt64(i * 4 + 4, sensorNodes[i].Level);
             }
+
+
+            preparedStatement->execute();
+            preparedStatement->clearAttributes();
+            preparedStatement->clearParameters();
+            s_Connection->commit();
+
         }
         catch (sql::SQLException& e)
         {
@@ -179,166 +145,201 @@ namespace CTMCS
         }
     }
 
-    void Database::Insert(uint64_t simulationID, uint64_t resultID, const CTMCParameters& ctmcParams)
+    void Database::Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<CTMCParameters>& ctmcParams)
     {
         try
         {
-            static std::vector<BinarySemaphoreWrapper> bs(s_MaxThreadCount);
-            static std::vector<sql::PreparedStatement*> preparedStatements(s_MaxThreadCount, s_Connection->prepareStatement(
+            static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
-                "CTMCParameter(SimulationID, ResultID, Type_, Level_, Value_)" + 
-                CreateInsertString(5, 4 * ctmcParams.Delta.size()))); // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR MAXLEVEL!
+                "CTMCParameter(SimulationID, ResultID, Type_, Level_, Value_)" +
+                CreateInsertString(5, c_BatchRowCount));
 
-            bool inserted = false;
-            while (!inserted)
+
+            bool done = false;
+            int resultIDIterator = 0;
+            int ctmcParamsLevelIterator = 0;
+            for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                int iterator = -1;
-                for (int i = 0; i < bs.size(); i++)
+                std::cout << "Inserting ctmcParams " << simulationID << ", " << resultIDIterator << ", " << ctmcParamsLevelIterator << '\n';
+                std::cout << "Out of " << ctmcParams.size() << '\n';
+
+                for (int currentBatchRow = 0; !done && currentBatchRow + 3 < c_BatchRowCount; currentBatchRow+= 4)
                 {
-                    if (bs[i].Semaphore.try_acquire())
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 1, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 2, resultID[resultIDIterator]);
+                    preparedStatement->setString(currentBatchRow * 5 + 3, "Tau");
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 4, ctmcParamsLevelIterator);
+                    preparedStatement->setDouble(currentBatchRow * 5 + 5, ctmcParams[resultIDIterator].Tau[ctmcParamsLevelIterator]);
+
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 6, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 7, resultID[resultIDIterator]);
+                    preparedStatement->setString(currentBatchRow * 5 + 8, "Lambda");
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 9, ctmcParamsLevelIterator);
+                    preparedStatement->setDouble(currentBatchRow * 5 + 10, ctmcParams[resultIDIterator].Lambda[ctmcParamsLevelIterator]);
+
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 11, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 12, resultID[resultIDIterator]);
+                    preparedStatement->setString(currentBatchRow * 5 + 13, "Delta");
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 14, ctmcParamsLevelIterator);
+                    preparedStatement->setDouble(currentBatchRow * 5 + 15, ctmcParams[resultIDIterator].Delta[ctmcParamsLevelIterator]);
+
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 16, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 17, resultID[resultIDIterator]);
+                    preparedStatement->setString(currentBatchRow * 5 + 18, "Mu");
+                    preparedStatement->setUInt64(currentBatchRow * 5 + 19, ctmcParamsLevelIterator);
+                    preparedStatement->setDouble(currentBatchRow * 5 + 20, ctmcParams[resultIDIterator].Mu[ctmcParamsLevelIterator]);
+
+                    ctmcParamsLevelIterator++;
+
+                    if (ctmcParamsLevelIterator == ctmcParams[resultIDIterator].Delta.size())
                     {
-                        iterator = i;
-                        break;
+                        resultIDIterator++;
+                        ctmcParamsLevelIterator = 0;
+                    }
+
+                    if (resultIDIterator == resultID.size())
+                        done = true;
+
+                    if (done)
+                    {
+                        for (int i = currentBatchRow + 1; i < c_BatchRowCount; i++)
+                        {
+                            preparedStatement->setUInt64(i * 5 + 1, 0);
+                            preparedStatement->setUInt64(i * 5 + 2, 0);
+                            preparedStatement->setNull(i * 5 + 3, sql::DataType::ENUM);
+                            preparedStatement->setNull(i * 5 + 4, sql::DataType::BIGINT);
+                            preparedStatement->setNull(i * 5 + 5, sql::DataType::DOUBLE);
+
+                        }
                     }
                 }
 
-                if (iterator != -1)
+                for (int i = c_BatchRowCount - (c_BatchRowCount % 4); i < c_BatchRowCount; i++)
                 {
-                    for (int i = 0; i < ctmcParams.Delta.size(); i++)
-                    {
-                        preparedStatements[iterator]->setUInt64(i * 20 + 1, simulationID);
-                        preparedStatements[iterator]->setUInt64(i * 20 + 2, resultID);
-                        preparedStatements[iterator]->setString(i * 20 + 3, "Tau");
-                        preparedStatements[iterator]->setUInt64(i * 20 + 4, i);
-                        preparedStatements[iterator]->setDouble(i * 20 + 5, ctmcParams.Tau[i]);
-
-                        preparedStatements[iterator]->setUInt64(i * 20 + 6, simulationID);
-                        preparedStatements[iterator]->setUInt64(i * 20 + 7, resultID);
-                        preparedStatements[iterator]->setString(i * 20 + 8, "Lambda");
-                        preparedStatements[iterator]->setUInt64(i * 20 + 9, i);
-                        preparedStatements[iterator]->setDouble(i * 20 + 10, ctmcParams.Lambda[i]);
-
-                        preparedStatements[iterator]->setUInt64(i * 20 + 11, simulationID);
-                        preparedStatements[iterator]->setUInt64(i * 20 + 12, resultID);
-                        preparedStatements[iterator]->setString(i * 20 + 13, "Delta");
-                        preparedStatements[iterator]->setUInt64(i * 20 + 14, i);
-                        preparedStatements[iterator]->setDouble(i * 20 + 15, ctmcParams.Delta[i]);
-
-                        preparedStatements[iterator]->setUInt64(i * 20 + 16, simulationID);
-                        preparedStatements[iterator]->setUInt64(i * 20 + 17, resultID);
-                        preparedStatements[iterator]->setString(i * 20 + 18, "Mu");
-                        preparedStatements[iterator]->setUInt64(i * 20 + 19, i);
-                        preparedStatements[iterator]->setDouble(i * 20 + 20, ctmcParams.Mu[i]);
-                    }
-
-                    preparedStatements[iterator]->execute();
-                    preparedStatements[iterator]->clearAttributes();
-                    preparedStatements[iterator]->clearParameters();
-                    s_Connection->commit();
-
-                    bs[iterator].Semaphore.release();
-                    inserted = true;
+                    preparedStatement->setUInt64(i * 5 + 1, 0);
+                    preparedStatement->setUInt64(i * 5 + 2, 0);
+                    preparedStatement->setNull(i * 5 + 3, sql::DataType::ENUM);
+                    preparedStatement->setNull(i * 5 + 4, sql::DataType::BIGINT);
+                    preparedStatement->setNull(i * 5 + 5, sql::DataType::DOUBLE);
                 }
+
+                preparedStatement->execute();
+                preparedStatement->clearAttributes();
+                preparedStatement->clearParameters();
+                s_Connection->commit();
             }
+
         }
         catch (sql::SQLException& e)
         {
-            std::cout << "ctmcParams.Delta.size() = " << ctmcParams.Delta.size() << '\n';
+            //std::cout << "ctmcParams.Delta.size() = " << ctmcParams.Delta.size() << '\n';
             std::cout << "SQL Error in Insert CTMCParameters. Error message: " + std::string(e.what());
             throw std::runtime_error("SQL Error in Insert CTMCParameters. Error message: " + std::string(e.what()));
         }
     }
 
-    void Database::Insert(uint64_t simulationID, uint64_t resultID, const SimulationResults& sr)
+    void Database::Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<SimulationResults>& sr)
     {
         try
         {
-            static std::vector<BinarySemaphoreWrapper> bs(s_MaxThreadCount);
-            static std::vector<sql::PreparedStatement*> preparedStatements(s_MaxThreadCount, s_Connection->prepareStatement(
+            static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
                 "Result(SimulationID, ResultID, TotalCollectionTime, TotalDataSentToBS)"
-                " values(?,?,?,?)"));
+                + CreateInsertString(4, c_BatchRowCount));
 
-            bool inserted = false;
-            while (!inserted)
+
+            bool done = false;
+            int resultIDIterator = 0;
+            for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                int iterator = -1;
-                for (int i = 0; i < bs.size(); i++)
+                std::cout << "Inserting SimulationResults " << simulationID << ", " << resultIDIterator << '\n';
+                std::cout << "Out of " << sr.size() << '\n';
+
+                for (int currentBatchRow = 0; !done && currentBatchRow < c_BatchRowCount; currentBatchRow++)
                 {
-                    if (bs[i].Semaphore.try_acquire())
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 1, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 2, resultID[resultIDIterator]);
+                    preparedStatement->setDouble(currentBatchRow * 4 + 3, sr[resultIDIterator].TotalCollectionTime);
+                    preparedStatement->setDouble(currentBatchRow * 4 + 4, sr[resultIDIterator].TotalDataSentToBS);
+
+                    resultIDIterator++;
+                    if (resultIDIterator == resultID.size())
+                        done = true;
+
+                    if (done)
                     {
-                        iterator = i;
-                        break;
+                        for (int i = currentBatchRow + 1; i < c_BatchRowCount; i++)
+                        {
+                            preparedStatement->setUInt64(i * 4 + 1, 0);
+                            preparedStatement->setUInt64(i * 4 + 2, 0);
+                            preparedStatement->setNull(i * 4 + 3, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 4 + 4, sql::DataType::DOUBLE);
+
+                        }
                     }
                 }
 
-                if (iterator != -1)
-                {
-                    preparedStatements[iterator]->setUInt64(1, simulationID);
-                    preparedStatements[iterator]->setUInt64(2, resultID);
-                    preparedStatements[iterator]->setDouble(3, sr.TotalCollectionTime);
-                    preparedStatements[iterator]->setDouble(4, sr.TotalDataSentToBS);
-
-
-                    preparedStatements[iterator]->execute();
-                    preparedStatements[iterator]->clearAttributes();
-                    preparedStatements[iterator]->clearParameters();
-                    s_Connection->commit();
-
-                    bs[iterator].Semaphore.release();
-                    inserted = true;
-                }
+                preparedStatement->execute();
+                preparedStatement->clearAttributes();
+                preparedStatement->clearParameters();
+                s_Connection->commit();
             }
         }
         catch (sql::SQLException& e)
         {
             std::cout << "SQL Error in Insert SimulationResults. Error message: " + std::string(e.what());
+            //std::cout << "DEBUGIT " << debugit << '\n';
             throw std::runtime_error("SQL Error in Insert SimulationResults. Error message: " + std::string(e.what()));
         }
     }
 
-    void Database::Insert(uint64_t simulationID, uint64_t resultID, const std::vector<double>& stateTime)
+    void Database::Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<std::vector<double>>& stateTime)
     {
         try
         {
             static std::vector<BinarySemaphoreWrapper> bs(s_MaxThreadCount);
-            static std::vector<sql::PreparedStatement*> preparedStatements(s_MaxThreadCount, s_Connection->prepareStatement(
+            static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
                 "StateTime(SimulationID, ResultID, State, Time_)" + 
-                CreateInsertString(4, stateTime.size()))); // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR SNCOUNT!
+                CreateInsertString(4, c_BatchRowCount)); // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR SNCOUNT!
 
 
-            bool inserted = false;
-            while (!inserted)
+            bool done = false;
+            int resultIDIterator = 0;
+            int stateTimeIterator = 0;
+            for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                int iterator = -1;
-                for (int i = 0; i < bs.size(); i++)
+                std::cout << "Inserting SimulationResults " << simulationID << ", " << resultIDIterator << ", " << stateTimeIterator << '\n';
+                std::cout << "Out of " << stateTime.size() << '\n';
+
+                for (int currentBatchRow = 0; !done && currentBatchRow < c_BatchRowCount; currentBatchRow++)
                 {
-                    if (bs[i].Semaphore.try_acquire())
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 1, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 2, resultID[resultIDIterator]);
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 3, stateTimeIterator);
+                    preparedStatement->setDouble(currentBatchRow * 4 + 4, stateTime[resultIDIterator][stateTimeIterator]);
+
+                    resultIDIterator++;
+                    if (resultIDIterator == resultID.size())
+                        done = true;
+
+                    if (done)
                     {
-                        iterator = i;
-                        break;
+                        for (int i = currentBatchRow + 1; i < c_BatchRowCount; i++)
+                        {
+                            preparedStatement->setUInt64(i * 4 + 1, 0);
+                            preparedStatement->setUInt64(i * 4 + 2, 0);
+                            preparedStatement->setUInt64(i * 4 + 3, 0);
+                            preparedStatement->setNull(i * 4 + 4, sql::DataType::DOUBLE);
+
+                        }
                     }
                 }
 
-                if (iterator != -1)
-                {
-                    for (int i = 0; i < stateTime.size(); i++)
-                    {
-                        preparedStatements[iterator]->setUInt64(i * 4 + 1, simulationID);
-                        preparedStatements[iterator]->setUInt64(i * 4 + 2, resultID);
-                        preparedStatements[iterator]->setUInt64(i * 4 + 3, i);
-                        preparedStatements[iterator]->setDouble(i * 4 + 4, stateTime[i]);
-                    }
-
-                    preparedStatements[iterator]->execute();
-                    preparedStatements[iterator]->clearAttributes();
-                    preparedStatements[iterator]->clearParameters();
-                    s_Connection->commit();
-
-                    bs[iterator].Semaphore.release();
-                    inserted = true;
-                }
+                preparedStatement->execute();
+                preparedStatement->clearAttributes();
+                preparedStatement->clearParameters();
+                s_Connection->commit();
             }
         }
         catch (sql::SQLException& e)
@@ -348,7 +349,7 @@ namespace CTMCS
         }
     }
 
-    void Database::Insert(uint64_t simulationID, uint64_t resultID, const std::vector<std::vector<double>>& transitionRateMatrix)
+    void Database::Insert(uint64_t simulationID, const std::vector<uint64_t>& resultID, const std::vector<std::vector<std::vector<double>>>& transitionRateMatrix)
     {
         // no, just... no.
     }

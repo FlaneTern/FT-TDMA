@@ -3,7 +3,7 @@
 
 namespace CTMCS
 {
-	static constexpr int s_MaxThreadCount = 1;
+	static constexpr int s_MaxThreadCount = 3;
 
 	struct CTMCParameters
 	{
@@ -67,6 +67,7 @@ namespace CTMCS
 		std::vector<std::vector<int>> m_IndividualStates;
 
 		//defined per run iteration
+		std::vector<uint64_t> m_ResultIDs;
 		std::vector<std::vector<std::vector<double>>> m_TransitionRateMatrices;
 		std::vector<CTMCParameters> m_CTMCParameters;
 		std::vector<std::vector<double>> m_StateTimes;
