@@ -46,14 +46,6 @@ namespace CTMCS
         return ss.str();
     }
 
-    struct BinarySemaphoreWrapper
-    {
-        std::binary_semaphore Semaphore;
-
-        BinarySemaphoreWrapper()
-            : Semaphore(1) {}
-    };
-
 
  	Database::Database()
 	{
@@ -119,23 +111,44 @@ namespace CTMCS
             static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
                 "SensorNode(SimulationID, SensorNodeID, Parent, Level_)" + 
-                CreateInsertString(4, sensorNodes.size()));  // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR SNCOUNT!
+                CreateInsertString(4, c_BatchRowCount));
 
-
-
-            for (int i = 0; i < sensorNodes.size(); i++)
+            bool done = false;
+            int SNIterator = 0;
+            for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                preparedStatement->setUInt64(i * 4 + 1, simulationID);
-                preparedStatement->setUInt64(i * 4 + 2, i);
-                preparedStatement->setInt64(i * 4 + 3, sensorNodes[i].Parent);
-                preparedStatement->setUInt64(i * 4 + 4, sensorNodes[i].Level);
+                //std::cout << "Inserting SimulationResults " << simulationID << ", " << SNIterator << '\n';
+                //std::cout << "Out of " << sensorNodes.size() << '\n';
+
+                for (int currentBatchRow = 0; !done && currentBatchRow < c_BatchRowCount; currentBatchRow++)
+                {
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 1, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 2, SNIterator);
+                    preparedStatement->setInt64(currentBatchRow * 4 + 3, sensorNodes[SNIterator].Parent);
+                    preparedStatement->setUInt64(currentBatchRow * 4 + 4, sensorNodes[SNIterator].Level);
+
+                    SNIterator++;
+                    if (SNIterator == sensorNodes.size())
+                        done = true;
+
+                    if (done)
+                    {
+                        for (int i = currentBatchRow + 1; i < c_BatchRowCount; i++)
+                        {
+                            preparedStatement->setUInt64(i * 4 + 1, 0);
+                            preparedStatement->setUInt64(i * 4 + 2, 0);
+                            preparedStatement->setNull(i * 4 + 3, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 4 + 4, sql::DataType::DOUBLE);
+
+                        }
+                    }
+                }
+
+                preparedStatement->execute();
+                preparedStatement->clearAttributes();
+                preparedStatement->clearParameters();
+                s_Connection->commit();
             }
-
-
-            preparedStatement->execute();
-            preparedStatement->clearAttributes();
-            preparedStatement->clearParameters();
-            s_Connection->commit();
 
         }
         catch (sql::SQLException& e)
@@ -160,10 +173,10 @@ namespace CTMCS
             int ctmcParamsLevelIterator = 0;
             for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                std::cout << "Inserting ctmcParams " << simulationID << ", " << resultIDIterator << ", " << ctmcParamsLevelIterator << '\n';
-                std::cout << "Out of " << ctmcParams.size() << '\n';
+                //std::cout << "Inserting ctmcParams " << simulationID << ", " << resultIDIterator << ", " << ctmcParamsLevelIterator << '\n';
+                //std::cout << "Out of " << ctmcParams.size() << '\n';
 
-                for (int currentBatchRow = 0; !done && currentBatchRow + 3 < c_BatchRowCount; currentBatchRow+= 4)
+                for (int currentBatchRow = 0; !done && currentBatchRow + 3 < c_BatchRowCount; currentBatchRow += 4)
                 {
                     preparedStatement->setUInt64(currentBatchRow * 5 + 1, simulationID);
                     preparedStatement->setUInt64(currentBatchRow * 5 + 2, resultID[resultIDIterator]);
@@ -202,14 +215,13 @@ namespace CTMCS
 
                     if (done)
                     {
-                        for (int i = currentBatchRow + 1; i < c_BatchRowCount; i++)
+                        for (int i = currentBatchRow + 4; i < c_BatchRowCount; i++)
                         {
                             preparedStatement->setUInt64(i * 5 + 1, 0);
                             preparedStatement->setUInt64(i * 5 + 2, 0);
                             preparedStatement->setNull(i * 5 + 3, sql::DataType::ENUM);
                             preparedStatement->setNull(i * 5 + 4, sql::DataType::BIGINT);
                             preparedStatement->setNull(i * 5 + 5, sql::DataType::DOUBLE);
-
                         }
                     }
                 }
@@ -252,8 +264,8 @@ namespace CTMCS
             int resultIDIterator = 0;
             for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                std::cout << "Inserting SimulationResults " << simulationID << ", " << resultIDIterator << '\n';
-                std::cout << "Out of " << sr.size() << '\n';
+                //std::cout << "Inserting SimulationResults " << simulationID << ", " << resultIDIterator << '\n';
+                //std::cout << "Out of " << sr.size() << '\n';
 
                 for (int currentBatchRow = 0; !done && currentBatchRow < c_BatchRowCount; currentBatchRow++)
                 {
@@ -297,11 +309,10 @@ namespace CTMCS
     {
         try
         {
-            static std::vector<BinarySemaphoreWrapper> bs(s_MaxThreadCount);
             static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
                 "Insert ignore into "
                 "StateTime(SimulationID, ResultID, State, Time_)" + 
-                CreateInsertString(4, c_BatchRowCount)); // THIS IS BAD !!! CAN ONLY RUN ONE VALUE FOR SNCOUNT!
+                CreateInsertString(4, c_BatchRowCount));
 
 
             bool done = false;
@@ -309,8 +320,8 @@ namespace CTMCS
             int stateTimeIterator = 0;
             for (int batchStartingRow = 0; !done; batchStartingRow += c_BatchRowCount)
             {
-                std::cout << "Inserting SimulationResults " << simulationID << ", " << resultIDIterator << ", " << stateTimeIterator << '\n';
-                std::cout << "Out of " << stateTime.size() << '\n';
+                //std::cout << "Inserting SimulationResults " << simulationID << ", " << resultIDIterator << ", " << stateTimeIterator << '\n';
+                //std::cout << "Out of " << stateTime.size() << '\n';
 
                 for (int currentBatchRow = 0; !done && currentBatchRow < c_BatchRowCount; currentBatchRow++)
                 {

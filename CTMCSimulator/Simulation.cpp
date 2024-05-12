@@ -58,27 +58,32 @@ namespace CTMCS
 		m_SensorNodes = std::vector<SensorNode>(m_SimulationParameters.SNCount);
 		m_SensorNodes[0].Level = 0;
 
-
-		for (int i = 1; i < m_SimulationParameters.SNCount; i++)
+		if (m_SimulationParameters.MaxLevel == 0)
 		{
-			int randomParent = s_Random() % i;
-			while ((randomParent != i && m_SensorNodes[randomParent].Level >= m_SimulationParameters.MaxLevel) || randomParent == i)
-				randomParent = s_Random() % i;
-
-			if (randomParent == m_SimulationParameters.SNCount)
+			for (int i = 1; i < m_SimulationParameters.SNCount; i++)
 				m_SensorNodes[i].Level = 0;
-			else
+		}
+		else
+		{
+			for (int i = 1; i < m_SimulationParameters.SNCount; i++)
 			{
-				m_SensorNodes[i].Level = m_SensorNodes[randomParent].Level + 1;
-				m_SensorNodes[i].Parent = randomParent;
+				int randomParent = s_Random() % i;
+				while ((randomParent != i && m_SensorNodes[randomParent].Level >= m_SimulationParameters.MaxLevel) || randomParent == i)
+					randomParent = s_Random() % i;
+
+				if (randomParent == m_SimulationParameters.SNCount)
+					m_SensorNodes[i].Level = 0;
+				else
+				{
+					m_SensorNodes[i].Level = m_SensorNodes[randomParent].Level + 1;
+					m_SensorNodes[i].Parent = randomParent;
+				}
 			}
 		}
 
 
 		for (int i = 0; i < m_SensorNodes.size(); i++)
 			std::cout << "SN " << i << ", Parent : " << m_SensorNodes[i].Parent << ", Level : " << m_SensorNodes[i].Level << '\n';
-
-		std::vector<double> SNCurrentDataSize(m_SimulationParameters.SNCount);
 
 
 		for (int i = 0; i < std::pow(3, m_SimulationParameters.SNCount); i++)
@@ -96,9 +101,13 @@ namespace CTMCS
 			m_IndividualStates.push_back(individualStatesCurrent);
 		}
 
+		Database::GetInsertionMutex()->lock();
 		// SIMULATIONPARAMS MUST BE INSERTED FIRST !!!
 		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters);
 		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes);
+		Database::GetInsertionMutex()->unlock();
+
+
 	}
 
 	void Simulation::Run(SimulationRunParameters simulationRunParameters)
@@ -155,6 +164,11 @@ namespace CTMCS
 		while (!isrp.Done)
 		{
 			cs.acquire();
+			std::cout << "BigLambda = " << isrp.BigLambdaCurrent << '\n';
+			std::cout << "BigDelta = ( " << isrp.BigDeltaLevelCurrent[0];
+			for (int i = 1; i < isrp.BigDeltaLevelCurrent.size(); i++)
+				std::cout << ", " << isrp.BigDeltaLevelCurrent[i];
+			std::cout << " )\n";
 			std::thread th(&Simulation::InnerRun, this, resultID, isrp, &cs);
 			th.detach();
 			isrp = IterationSRP(isrp, simulationRunParameters);
@@ -171,6 +185,7 @@ namespace CTMCS
 
 	void Simulation::InnerRun(uint64_t resultID, IterationSRP isrp, std::counting_semaphore<s_MaxThreadCount>* cs)
 	{
+
 		auto SNs = m_SensorNodes;
 
 		CTMCParameters CTMCParams;
@@ -181,12 +196,11 @@ namespace CTMCS
 			CTMCParams.Tau.push_back(1.0 / m_SimulationParameters.TransferTime);
 			CTMCParams.Lambda.push_back(1.0 / isrp.BigLambdaCurrent);
 			CTMCParams.Delta.push_back(1.0 / isrp.BigDeltaLevelCurrent[i]);
-			CTMCParams.Mu.push_back(1.0 / (m_SimulationParameters.RecoveryTime + 1.0 / (2 * CTMCParams.Delta.back())));
+			CTMCParams.Mu.push_back(1.0 / (m_SimulationParameters.RecoveryTime + 1.0 / (2 * CTMCParams.Delta[i])));
 		}
+
 		for (int i = 0; i < SNs.size(); i++)
 			SNs[i].CurrentDataSize = 0.0;
-
-			
 
 		std::vector<std::vector<bool>> TransitionExists(std::pow(3, m_SimulationParameters.SNCount), std::vector<bool>(std::pow(3, m_SimulationParameters.SNCount), false));
 		std::vector<std::vector<double>> TransitionRateMatrix(std::pow(3, m_SimulationParameters.SNCount), std::vector<double>(std::pow(3, m_SimulationParameters.SNCount)));
@@ -354,16 +368,16 @@ namespace CTMCS
 		//	std::cout << '\n';
 		//}
 
-		std::cout << "BigLambda = " << isrp.BigLambdaCurrent << '\n';
-		std::cout << "BigDelta = ( " << isrp.BigDeltaLevelCurrent[0];
-		for (int i = 1; i < isrp.BigDeltaLevelCurrent.size(); i++)
-			std::cout << ", " << isrp.BigDeltaLevelCurrent[i];
-		std::cout << " )\n";
+		//std::cout << "BigLambda = " << isrp.BigLambdaCurrent << '\n';
+		//std::cout << "BigDelta = ( " << isrp.BigDeltaLevelCurrent[0];
+		//for (int i = 1; i < isrp.BigDeltaLevelCurrent.size(); i++)
+		//	std::cout << ", " << isrp.BigDeltaLevelCurrent[i];
+		//std::cout << " )\n";
 		//for (int i = 0; i < timeSpentInState.size(); i++)
 		//	std::cout << "Time spent in state " << i << " = " << timeSpentInState[i] << '\n';
-		std::cout << "Total Collection time = " << simulationResults.TotalCollectionTime << '\n';
-		std::cout << "Total data sent to BS = " << simulationResults.TotalDataSentToBS << '\n';
-		std::cout << "-------------------------------------------------------\n";
+		//std::cout << "Total Collection time = " << simulationResults.TotalCollectionTime << '\n';
+		//std::cout << "Total data sent to BS = " << simulationResults.TotalDataSentToBS << '\n';
+		//std::cout << "-------------------------------------------------------\n";
 
 		// i dont know what to do with this
 

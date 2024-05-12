@@ -70,4 +70,7 @@ select * from CTMCParameter;
 select * from StateTime;
 select * from TransitionRateMatrix;
 
+select result.ResultID, CTMCParameter.Value_ from result inner join CTMCParameter on result.SimulationID = CTMCParameter.SimulationID
+                       and result.ResultID = CTMCParameter.ResultID and CTMCParameter.Type_ = 'Delta' and CTMCParameter.Level_ = 0 and result.SimulationID = 1 order by result.ResultID
+
 
