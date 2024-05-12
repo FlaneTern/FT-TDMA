@@ -5,6 +5,7 @@
 
 int main()
 {
+#if 1
 	{
 		CTMCS::SimulationParameters siParams;
 		siParams.SNCount = 5;
@@ -77,4 +78,57 @@ int main()
 
 		si.Run(siRunParams);
 	}
+
+#endif
+
+#if 0
+	{
+		CTMCS::SimulationParameters siParams;
+		siParams.SNCount = 5;
+		siParams.MaxLevel = 2;
+		siParams.MaxSimulationTime = 1000;
+		siParams.RecoveryTime = 30;
+		siParams.TransferTime = 60;
+
+		CTMCS::SimulationRunParameters siRunParams;
+		siRunParams.BigDeltaLevelStart = { 20, 200, 200 };
+		siRunParams.BigDeltaLevelEnd = { 800, 1000, 1000 };
+		siRunParams.BigDeltaLevelStride = { 100, 100, 100 };
+		siRunParams.BigLambdaStart = 3600;
+		siRunParams.BigLambdaEnd = 3600;
+		siRunParams.BigLambdaStride = 3600;
+
+		if (siParams.MaxLevel + 1 != siRunParams.BigDeltaLevelEnd.size())
+			throw std::runtime_error("DeltaLevel and MaxLevel Mismatch !");
+
+		CTMCS::Simulation si(siParams);
+
+		si.Run(siRunParams);
+	}
+#endif
+#if 0
+	{
+		CTMCS::SimulationParameters siParams;
+		siParams.SNCount = 5;
+		siParams.MaxLevel = 1;
+		siParams.MaxSimulationTime = 1000;
+		siParams.RecoveryTime = 30;
+		siParams.TransferTime = 60;
+
+		CTMCS::SimulationRunParameters siRunParams;
+		siRunParams.BigDeltaLevelStart = { 20, 200 };
+		siRunParams.BigDeltaLevelEnd = { 800, 1000 };
+		siRunParams.BigDeltaLevelStride = { 100, 100 };
+		siRunParams.BigLambdaStart = 3600;
+		siRunParams.BigLambdaEnd = 3600;
+		siRunParams.BigLambdaStride = 3600;
+
+		if (siParams.MaxLevel + 1 != siRunParams.BigDeltaLevelEnd.size())
+			throw std::runtime_error("DeltaLevel and MaxLevel Mismatch !");
+
+		CTMCS::Simulation si(siParams);
+
+		si.Run(siRunParams);
+	}
+#endif
 }
