@@ -71,16 +71,15 @@ namespace WSN
 		}
 	}
 
-	// small parameters, i.e. rates instead of duration
+	// big parameters, i.e. durations instead of rates
 	double PWSteadyStateFunc(double selfDelta, double selfTau, double selfLambda, double selfReparationTime, std::vector<double> childrenPWs)
 	{
 		double mu = 1.0;
 		for (int i = 0; i < childrenPWs.size(); i++)
 			mu += childrenPWs[i];
-		mu *= selfReparationTime + 1.0 / (selfDelta * 2.0);
-		mu = 1.0 / mu;
+		mu *= selfReparationTime + selfDelta / 2.0;
 
-		return 1.0 / (1.0 + (selfDelta / selfTau) + (selfLambda / mu));
+		return 1.0 / (1.0 + (selfTau / selfDelta) + (mu / selfLambda));
 	}
 
 
@@ -131,8 +130,8 @@ namespace WSN
 						//childrenPWs.push_back(PWs[children[j][k]]);
 						childrenPWs.push_back(PWWs[children[j][k]]);
 
-					PWs[j] = PWSteadyStateFunc(deltasIn[j], 1.0 / m_SimulationParameters.TransferTime,
-						1.0 / m_SimulationParameters.FailureDistribution.m_Mean, 1.0 / m_SimulationParameters.RecoveryTime, childrenPWs);
+					PWs[j] = PWSteadyStateFunc(deltasIn[j], m_SimulationParameters.TransferTime,
+						m_SimulationParameters.FailureDistribution.m_Mean, m_SimulationParameters.RecoveryTime, childrenPWs);
 
 					PWWs[j] = PWs[j];
 					for (int k = 0; k < children[j].size(); k++)
@@ -152,7 +151,7 @@ namespace WSN
 		};
 
 		static constexpr double randomRangeHigh = 1.0;
-		static constexpr double randomRangeLow = 0.00001;
+		static constexpr double randomRangeLow = 100000;
 
 
 		// mean = (A + B) / 2
@@ -252,7 +251,7 @@ namespace WSN
 			std::cout << "Iteration : " << iteration << '\n';
 			std::cout << "Delta = ( ";
 			for (int i = 0; i < swarmBestCoords.size(); i++)
-				std::cout << 1.0 / swarmBestCoords[i] << ", ";
+				std::cout << swarmBestCoords[i] << ", ";
 			std::cout << " )\nPW = " << swarmBestValue << "\n--------------------------------------------------------------------------------------\n";
 		}
 
