@@ -1,6 +1,7 @@
 #include "PCH.h"
 #include "Database.h"
 
+#if not _DEBUG
 #include "mysql_connection.h"
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
@@ -12,7 +13,7 @@ namespace CTMCS
     static constexpr char c_Server[] = "tcp://127.0.0.1:3306\0";
     static constexpr char c_Username[] = "WSN\0";
     static constexpr char c_Password[] = "wsn123\0";
-    static constexpr char c_DatabaseName[] = "CTMCS\0";
+    static constexpr char c_DatabaseName[] = "CTMCS2\0";
 
 	// A LOT OF UNFREED STUFF such as driver, connection, and statements. Maybe free these?
     // Doesn't matter tbh
@@ -330,9 +331,14 @@ namespace CTMCS
                     preparedStatement->setUInt64(currentBatchRow * 4 + 3, stateTimeIterator);
                     preparedStatement->setDouble(currentBatchRow * 4 + 4, stateTime[resultIDIterator][stateTimeIterator]);
 
-                    resultIDIterator++;
-                    if (resultIDIterator == resultID.size())
-                        done = true;
+                    stateTimeIterator++;
+                    
+                    if (stateTimeIterator == stateTime.size())
+                    {
+                        resultIDIterator++;
+                        if (resultIDIterator == resultID.size())
+                            done = true;
+                    }
 
                     if (done)
                     {
@@ -366,3 +372,4 @@ namespace CTMCS
     }
 }
 
+#endif

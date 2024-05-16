@@ -22,5 +22,14 @@ namespace WSN
 	{
 	public:
 		Position m_Position;
+		int64_t m_Parent;
+		uint64_t m_Level;
+
+		double m_DeltaOpt;
+
+		double m_CurrentData = 0;
+
+		double m_CollectionTime = 0;
+		double m_WastedTime = 0;
 	};
 }

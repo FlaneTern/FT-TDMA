@@ -1,4 +1,6 @@
 #include "PCH.h"
+
+#if not _DEBUG
 #include "Database.h"
 
 #include "mysql_connection.h"
@@ -348,3 +350,5 @@ void Database::Insert(uint64_t simulationID, const std::vector<Distribution>& di
         return result->getUInt64(1);
     }
 }
+
+#endif

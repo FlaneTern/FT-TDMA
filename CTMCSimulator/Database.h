@@ -1,4 +1,6 @@
 #pragma once
+
+#if not _DEBUG
 #include "Simulation.h"
 
 namespace CTMCS
@@ -28,4 +30,5 @@ namespace CTMCS
 		static std::mutex* s_InsertionMutex;
 	};
 }
+#endif
 

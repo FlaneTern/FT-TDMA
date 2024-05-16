@@ -1,3 +1,4 @@
+#if not _DEBUG
 #pragma once
 #include "Simulation.h"
 
@@ -30,7 +31,7 @@ namespace WSN
 		/// <param name="simulationID">Simulation ID</param>
 		/// <param name="dists"></param>
 		/// <param name="sdd"></param>
-		void Insert(uint64_t simulationID, const std::vector<Distribution>& dists, const std::vector<SimulationDistributionData>& sdd);
+		void Insert(uint64_t simulationID, const SimulationResults& dists);
 
 
 		uint64_t GetLatestSimulationID();
@@ -41,3 +42,4 @@ namespace WSN
 		static Database* s_DatabaseInstance;
 	};
 }
+#endif
