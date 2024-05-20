@@ -18,6 +18,12 @@ namespace WSN
 
 	std::string WorkingStateToString(const WorkingState& ws);
 
+	struct Packet
+	{
+		uint64_t InitialSNID;
+		double InitialTimestamp;
+	};
+
 	class SensorNode
 	{
 	public:
@@ -31,5 +37,12 @@ namespace WSN
 
 		double m_CollectionTime = 0;
 		double m_WastedTime = 0;
+
+		double m_EnergyConsumed = 0;
+
+		double m_SentPacketTotalDelay = 0;
+		uint64_t m_SentPacketCount = 0;
+
+		std::vector<Packet> m_Packets;
 	};
 }

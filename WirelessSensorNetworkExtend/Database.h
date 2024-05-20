@@ -16,7 +16,7 @@ namespace WSN
 		/// </summary>
 		/// <param name="simulationID">Simulation ID</param>
 		/// <param name="simulationParameters">Simulation Hyperparameters</param>
-		void Insert(uint64_t simulationID, const SimulationParameters& simulationParameters);
+		void Insert(uint64_t simulationID, const SimulationParameters& simulationParameters, const SimulationResults& sr);
 
 		/// <summary>
 		/// Saves the initial sensor nodes in a simulation
@@ -24,15 +24,6 @@ namespace WSN
 		/// <param name="simulationID">Simulation ID</param>
 		/// <param name="sensorNodes">Sensor Nodes within the simulation</param>
 		void Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes);
-
-		/// <summary>
-		/// Saves the distribution parameters used to generate failure timestamps and the results of brute forcing delta
-		/// </summary>
-		/// <param name="simulationID">Simulation ID</param>
-		/// <param name="dists"></param>
-		/// <param name="sdd"></param>
-		void Insert(uint64_t simulationID, const SimulationResults& dists);
-
 
 		uint64_t GetLatestSimulationID();
 

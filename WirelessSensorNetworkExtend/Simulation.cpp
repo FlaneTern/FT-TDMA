@@ -6,6 +6,11 @@
 namespace WSN
 {
 
+	static constexpr double s_EnergyRateWorking = 0.4;
+	static constexpr double s_EnergyRateDataTransfer = 1.0;
+	static constexpr double s_EnergyTransitionWorkingToTransfer = 20.0;
+	static constexpr double s_EnergyTransitionTransferToWorking = 20.0;
+
 	//std::vector<SimulationSummaryData> Simulation::s_Summary;
 
 	Simulation::Simulation(SimulationParameters sp)
@@ -41,8 +46,8 @@ namespace WSN
 
 			for (int SNCount = 0; SNCount < m_SimulationParameters.LevelSNCount[i]; )
 			{
-				double xPos = dist.GenerateRandomNumber();
-				double yPos = dist.GenerateRandomNumber();
+				double xPos = dist.GenerateRandomNumber() * (s_RNG() % 2 ? -1 : 1);
+				double yPos = dist.GenerateRandomNumber() * (s_RNG() % 2 ? -1 : 1);
 
 				if (xPos * xPos + yPos * yPos <= m_SimulationParameters.LevelRadius[i] * m_SimulationParameters.LevelRadius[i]
 					&& (i == 0 || xPos * xPos + yPos * yPos > m_SimulationParameters.LevelRadius[i - 1] * m_SimulationParameters.LevelRadius[i - 1]))
@@ -62,6 +67,7 @@ namespace WSN
 
 	void Simulation::CreateSNRoutingTables()
 	{
+#if 0
 		for (int i = 0; i < m_SensorNodes.size(); i++)
 		{
 			if (m_SensorNodes[i].m_Level == 0)
@@ -69,8 +75,84 @@ namespace WSN
 			else
 				m_SensorNodes[i].m_Parent = m_SimulationParameters.LevelSNCount[m_SensorNodes[i].m_Level - 1] * (m_SensorNodes[i].m_Level - 1) + 1;
 		}
-	}
+#else
+		// codenya rama =D
 
+		using namespace std;
+
+		short n, limit = 1000, spare = 5;
+
+		class Node {
+		public:
+			float x, y;
+			short tier, index;
+			vector <Node> route;
+			Node(float arg1, float arg2, short arg3, short arg4) {
+				x = arg1;
+				y = arg2;
+				tier = arg3;
+				index = arg4;
+			}
+		};
+
+		vector <Node> node;
+		vector < pair <short, short> > edge;
+
+		auto getDistance = [](Node node1, Node node2)
+		{
+			return sqrt((node1.x - node2.x) * (node1.x - node2.x) + (node1.y - node2.y) * (node1.y - node2.y));
+		};
+
+		auto connect = [&]() {
+			for (auto& i : node) {
+				if (i.tier) {
+					vector < pair <Node, float> > pos;
+					for (auto j : node) {
+						if (i.tier == j.tier + 1)
+							pos.push_back(make_pair(j, getDistance(i, j)));
+					}
+					sort(pos.begin(), pos.end(), [&](pair <Node, float> ll, pair <Node, float> rr) {
+						return ll.second < rr.second;
+						});
+					for (short j = 0; j < spare; ++j)
+						i.route.push_back(pos[j].first);
+				}
+			}
+		};
+
+
+
+		for (short i = 0, l; i < m_SensorNodes.size(); ++i) {
+			float j, k;
+			node.push_back(Node(m_SensorNodes[i].m_Position.X, m_SensorNodes[i].m_Position.Y, m_SensorNodes[i].m_Level, i));
+		}
+
+		connect();
+
+		//for (auto i : node) {
+		//	cout << i.index << ":";
+		//	for (auto j : i.route)
+		//		cout << ' ' << j.index;
+		//	cout << endl;
+		//}
+
+		for (int i = 0; i < node.size(); i++)
+		{
+			if (node[i].tier == 0)
+				m_SensorNodes[node[i].index].m_Parent = -1;
+			else
+			{
+				if(node[i].route.size() > 0)
+					m_SensorNodes[node[i].index].m_Parent = node[i].route[0].index;
+			}
+		}
+
+
+#endif
+
+
+	}
+	 
 	// big parameters, i.e. durations instead of rates
 	double PWSteadyStateFunc(double selfDelta, double selfTau, double selfLambda, double selfReparationTime, std::vector<double> childrenPWs)
 	{
@@ -115,8 +197,7 @@ namespace WSN
 
 		auto CalculatePW = [&](std::vector<double> deltasIn)
 		{
-			std::vector<double> PWs(m_SensorNodes.size());
-			std::vector<double> PWWs(m_SensorNodes.size());
+			std::vector<double> CWs(m_SensorNodes.size());
 
 			for (int i = m_SimulationParameters.LevelRadius.size() - 1; i >= 0; i--)
 			{
@@ -125,33 +206,32 @@ namespace WSN
 					if (m_SensorNodes[j].m_Level != i)
 						continue;
 
-					std::vector<double> childrenPWs;
+					std::vector<double> childrenCWs;
 					for (int k = 0; k < children[j].size(); k++)
 						//childrenPWs.push_back(PWs[children[j][k]]);
-						childrenPWs.push_back(PWWs[children[j][k]]);
+						childrenCWs.push_back(CWs[children[j][k]]);
 
-					PWs[j] = PWSteadyStateFunc(deltasIn[j], m_SimulationParameters.TransferTime,
-						m_SimulationParameters.FailureDistribution.m_Mean, m_SimulationParameters.RecoveryTime, childrenPWs);
+					CWs[j] = PWSteadyStateFunc(deltasIn[j], m_SimulationParameters.TransferTime,
+						m_SimulationParameters.FailureDistribution.m_Mean, m_SimulationParameters.RecoveryTime, childrenCWs);
 
-					PWWs[j] = PWs[j];
 					for (int k = 0; k < children[j].size(); k++)
-						PWWs[j] += PWWs[children[j][k]];
+						CWs[j] += CWs[children[j][k]];
 				}
 			}
 
 			double BSTotal = 0.0;
-			for (int i = 0; i < PWWs.size(); i++)
+			for (int i = 0; i < CWs.size(); i++)
 			{
-				//if (m_SensorNodes[i].m_Parent == -1)
+				if (m_SensorNodes[i].m_Parent == -1)
 					//BSTotal += PWs[i];
-					BSTotal += PWWs[i];
+					BSTotal += CWs[i];
 			}
 
 			return BSTotal;
 		};
 
-		static constexpr double randomRangeHigh = 1.0;
-		static constexpr double randomRangeLow = 100000;
+		static constexpr double randomRangeHigh = 100000.0;
+		static constexpr double randomRangeLow = 1.0;
 
 
 		// mean = (A + B) / 2
@@ -225,6 +305,8 @@ namespace WSN
 					particlesTemp[particle][dimension] += particlesVelocity[particle][dimension];
 					if (particlesTemp[particle][dimension] < 0.0)
 						particlesTemp[particle][dimension] = 0.0;
+					//if (particlesTemp[particle][dimension] > 100000.0)
+					//	particlesTemp[particle][dimension] = 100000.0;
 				}
 
  				double temp = CalculatePW(particlesTemp[particle]);
@@ -248,14 +330,23 @@ namespace WSN
 			iterationsSinceLastSwarmBestChange++;
 			iteration++;
 
-			std::cout << "Iteration : " << iteration << '\n';
-			std::cout << "Delta = ( ";
-			for (int i = 0; i < swarmBestCoords.size(); i++)
-				std::cout << swarmBestCoords[i] << ", ";
-			std::cout << " )\nPW = " << swarmBestValue << "\n--------------------------------------------------------------------------------------\n";
+			//std::cout << "Iteration : " << iteration << '\n';
+			//std::cout << "Delta = ( ";
+			//for (int i = 0; i < swarmBestCoords.size(); i++)
+			//	std::cout << swarmBestCoords[i] << ", ";
+			//std::cout << " )\nPW = " << swarmBestValue << "\n--------------------------------------------------------------------------------------\n";
 		}
 
-		std::cout << "Done!";
+		for (int i = 0; i < m_SensorNodes.size(); i++)
+			m_SensorNodes[i].m_DeltaOpt = swarmBestCoords[i];
+		m_SimulationResults.CWSNEfficiency = swarmBestValue / m_SensorNodes.size();
+
+		std::cout << "Delta = ( ";
+		for (int i = 0; i < swarmBestCoords.size(); i++)
+			std::cout << swarmBestCoords[i] << ", ";
+		std::cout << " )\nPW = " << swarmBestValue / m_SensorNodes.size() << "\n--------------------------------------------------------------------------------------\n";
+
+		std::cout << "Done!\n";
 	}
 
 	void Simulation::Run()
@@ -264,6 +355,31 @@ namespace WSN
 
 		SimulationResults& sr = m_SimulationResults;
 			
+		struct WorkingStateTimestamp
+		{
+			uint64_t SNID;
+			WorkingState State;
+			double Timestamp;
+		};
+
+		std::vector<WorkingStateTimestamp> previousEvents;
+		auto pqCompare = [](WorkingStateTimestamp left, WorkingStateTimestamp right) 
+		{ 
+			if (left.Timestamp > right.Timestamp)
+				return true;
+			else if (left.Timestamp < right.Timestamp)
+				return false;
+
+			return left.SNID < right.SNID;
+		};
+
+		std::priority_queue<WorkingStateTimestamp, std::vector<WorkingStateTimestamp>, decltype(pqCompare)> eventQueue(pqCompare);
+		for (int i = 0; i < m_SensorNodes.size(); i++)
+		{
+			eventQueue.push({ (uint64_t)i, WorkingState::Collection, 0.0 });
+			previousEvents.push_back({ (uint64_t)i, WorkingState::Collection, 0.0 });
+		}
+		
 		// Generating failure timestamps
 		std::vector<std::vector<double>> SNsFailureTimestamps(m_SensorNodes.size());
 		std::vector<int> SNsFailureTimestampsIterator(m_SensorNodes.size(), 0);
@@ -276,37 +392,12 @@ namespace WSN
 				currentTime += timeToNextFailure;
 				// LOOK AT THIS
 				uint64_t SNID = s_RNG() % m_SensorNodes.size();
-				sr.Failures.push_back({ SNID, currentTime});
+				sr.Failures.push_back({ SNID, currentTime });
 				SNsFailureTimestamps[SNID].push_back(currentTime);
+				//eventQueue.push({ SNID, WorkingState::Recovery, currentTime });
 			}
 		}
 
-
-		struct WorkingStateTimestamp
-		{
-			uint64_t SNID;
-			WorkingState State;
-			double Timestamp;
-		};
-
-		std::vector<WorkingStateTimestamp> previousEvents;
-		auto pqCompare = [](WorkingStateTimestamp left, WorkingStateTimestamp right) 
-		{ 
-			if (left.Timestamp < right.Timestamp)
-				return true;
-			else if(left.Timestamp > right.Timestamp)
-				return false;
-
-			return left.SNID > right.SNID;
-		};
-
-		std::priority_queue<WorkingStateTimestamp, std::vector<WorkingStateTimestamp>, decltype(pqCompare)> eventQueue(pqCompare);
-		for (int i = 0; i < m_SensorNodes.size(); i++)
-		{
-			eventQueue.push({ (uint64_t)i, WorkingState::Collection, 0.0 });
-			previousEvents.push_back({ (uint64_t)i, WorkingState::Collection, 0.0 });
-		}
-		
 		double transferredTotalDuration = 0;
 		double currentTime = 0.0;
 		int failureCount = 0;
@@ -319,6 +410,9 @@ namespace WSN
 			auto& currentState = currentEvent.State;
 			auto& currentSN = currentEvent.SNID;
 			eventQueue.pop();
+
+			//std::cout << "here = " << currentSN << '\n';
+
 
 			// deciding the next state to put in eventQueue
 			{
@@ -349,25 +443,27 @@ namespace WSN
 				else
 				{
 					eventQueue.push({ currentSN, nextState, nextTime });
-					SNsFailureTimestampsIterator[currentSN]++;
 				}
-
 			}
 
 			// still no rerouting
 			if (previousEvents[currentSN].State == WorkingState::Collection)
 			{
 				if (currentState == WorkingState::Collection) // handles the initialization
-					continue; 
+				{
+					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
+				}
 				else if (currentState == WorkingState::Transfer)
 				{
 					m_SensorNodes[currentSN].m_CollectionTime += m_SensorNodes[currentSN].m_DeltaOpt;
 					m_SensorNodes[currentSN].m_CurrentData += m_SensorNodes[currentSN].m_DeltaOpt;
+					m_SensorNodes[currentSN].m_EnergyConsumed += m_SensorNodes[currentSN].m_DeltaOpt * s_EnergyRateWorking + s_EnergyTransitionWorkingToTransfer;
 				}
 				else if (currentState == WorkingState::Recovery)
 				{
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
+					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateWorking;
 				}
 			}
 			else if (previousEvents[currentSN].State == WorkingState::Transfer)
@@ -377,15 +473,29 @@ namespace WSN
 					if(m_SensorNodes[currentSN].m_Parent != -1)
 					{
 						if (previousEvents[m_SensorNodes[currentSN].m_Parent].State != WorkingState::Recovery)
+						{
 							m_SensorNodes[m_SensorNodes[currentSN].m_Parent].m_CurrentData += m_SensorNodes[currentSN].m_CurrentData;
+							for (int i = 0; i < m_SensorNodes[currentSN].m_Packets.size(); i++)
+								m_SensorNodes[m_SensorNodes[currentSN].m_Parent].m_Packets.push_back(m_SensorNodes[currentSN].m_Packets[i]);
+						}
 					}
 					else
 					{
 						transferredTotalDuration += m_SensorNodes[currentSN].m_CurrentData;
+						for (int i = 0; i < m_SensorNodes[currentSN].m_Packets.size(); i++)
+						{
+							m_SensorNodes[m_SensorNodes[currentSN].m_Packets[i].InitialSNID].m_SentPacketTotalDelay += currentTime - m_SensorNodes[currentSN].m_Packets[i].InitialTimestamp;
+							m_SensorNodes[m_SensorNodes[currentSN].m_Packets[i].InitialSNID].m_SentPacketCount++;
+						}
+
 					}
+
+					m_SensorNodes[currentSN].m_Packets.clear();
 
 					m_SensorNodes[currentSN].m_WastedTime += m_SimulationParameters.TransferTime;
 					m_SensorNodes[currentSN].m_CurrentData = 0;
+					m_SensorNodes[currentSN].m_EnergyConsumed += m_SimulationParameters.TransferTime * s_EnergyRateDataTransfer + s_EnergyTransitionTransferToWorking;
+					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
 				}
 				else if (currentState == WorkingState::Transfer) {} // not possible
 				else if (currentState == WorkingState::Recovery) // WARNING : PARTIAL TRANSFER FAILS	
@@ -393,12 +503,16 @@ namespace WSN
 					m_SensorNodes[currentSN].m_CurrentData = 0;
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
+					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateDataTransfer;
 				}
 			}
 			else if (previousEvents[currentSN].State == WorkingState::Recovery)
 			{
-				if (currentState == WorkingState::Collection) // does nothing
+				if (currentState == WorkingState::Collection)
+				{
 					m_SensorNodes[currentSN].m_WastedTime += m_SimulationParameters.RecoveryTime;
+					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
+				}
 				else if (currentState == WorkingState::Transfer) {} // not possible
 				else if (currentState == WorkingState::Recovery)
 				{
@@ -417,11 +531,18 @@ namespace WSN
 		sr.ActualTotalDuration = currentTime;
 		sr.FinalFailureIndex = failureCount;
 
+		//for (int i = 0; i < m_SensorNodes.size(); i++)
+		//{
+		//	std::cout << "SN " << i << "\tDelta = " << m_SensorNodes[i].m_DeltaOpt << '\t';
+		//	std::cout << "Collection Time = " << m_SensorNodes[i].m_CollectionTime << '\t';
+		//	std::cout << "Wasted Time = " << m_SensorNodes[i].m_WastedTime << '\t';
+		//	std::cout << "EnergyConsumed = " << m_SensorNodes[i].m_EnergyConsumed << '\n';
+		//}
+		std::cout << "Actual Total Duration = " << sr.ActualTotalDuration << '\n';
 
 #if not _DEBUG
-		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters);
+		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters, m_SimulationResults);
 		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes);
-		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationResults);
 #endif
 	}
 
