@@ -351,7 +351,7 @@ namespace WSN
 
 	void Simulation::Run()
 	{
-		static constexpr double failGenerationDurationMultiplier = 100.0;
+		static constexpr double failGenerationDurationMultiplier = 1.0;
 
 		SimulationResults& sr = m_SimulationResults;
 			
@@ -383,6 +383,7 @@ namespace WSN
 		// Generating failure timestamps
 		std::vector<std::vector<double>> SNsFailureTimestamps(m_SensorNodes.size());
 		std::vector<int> SNsFailureTimestampsIterator(m_SensorNodes.size(), 0);
+		for(int i = 0; i < m_SensorNodes.size(); i++)
 		{
 			double currentTime = 0;
 			double timeToNextFailure;
@@ -391,9 +392,8 @@ namespace WSN
 				timeToNextFailure = m_SimulationParameters.FailureDistribution.GenerateRandomNumber();
 				currentTime += timeToNextFailure;
 				// LOOK AT THIS
-				uint64_t SNID = s_RNG() % m_SensorNodes.size();
-				sr.Failures.push_back({ SNID, currentTime });
-				SNsFailureTimestamps[SNID].push_back(currentTime);
+				sr.Failures.push_back({ (uint64_t)i, currentTime });
+				SNsFailureTimestamps[i].push_back(currentTime);
 				//eventQueue.push({ SNID, WorkingState::Recovery, currentTime });
 			}
 		}
@@ -464,6 +464,7 @@ namespace WSN
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
 					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateWorking;
+					m_SensorNodes[currentSN].m_Packets.clear();
 				}
 			}
 			else if (previousEvents[currentSN].State == WorkingState::Transfer)
@@ -504,6 +505,7 @@ namespace WSN
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
 					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateDataTransfer;
+					m_SensorNodes[currentSN].m_Packets.clear();
 				}
 			}
 			else if (previousEvents[currentSN].State == WorkingState::Recovery)
@@ -518,6 +520,7 @@ namespace WSN
 				{
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
+					m_SensorNodes[currentSN].m_Packets.clear();
 				}
 			}
 
