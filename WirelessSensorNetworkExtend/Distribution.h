@@ -24,6 +24,7 @@ namespace WSN
 		~Distribution();
 
 		double GenerateRandomNumber();
+		double GenerateRandomNumber(std::mt19937_64& rng);
 		std::map<long long, long long> GetCDF();
 
 		void* m_Distribution;

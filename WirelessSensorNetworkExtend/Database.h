@@ -16,14 +16,14 @@ namespace WSN
 		/// </summary>
 		/// <param name="simulationID">Simulation ID</param>
 		/// <param name="simulationParameters">Simulation Hyperparameters</param>
-		void Insert(uint64_t simulationID, const SimulationParameters& simulationParameters, const SimulationResults& sr);
+		void Insert(uint64_t simulationID, const SimulationParameters& simulationParameters, const SimulationResults& sr, const SimulationType& st);
 
 		/// <summary>
 		/// Saves the initial sensor nodes in a simulation
 		/// </summary>
 		/// <param name="simulationID">Simulation ID</param>
 		/// <param name="sensorNodes">Sensor Nodes within the simulation</param>
-		void Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes);
+		void Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes, const const SimulationType& st);
 
 		uint64_t GetLatestSimulationID();
 

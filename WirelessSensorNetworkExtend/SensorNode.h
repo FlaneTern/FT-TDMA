@@ -22,6 +22,7 @@ namespace WSN
 	{
 		uint64_t InitialSNID;
 		double InitialTimestamp;
+		double Size;
 	};
 
 	class SensorNode
@@ -43,6 +44,12 @@ namespace WSN
 		double m_SentPacketTotalDelay = 0;
 		uint64_t m_SentPacketCount = 0;
 
+		uint64_t m_Color;
+
+		double m_TotalDataSent = 0;
+
 		std::vector<Packet> m_Packets;
+
+		int m_CurrentPacketIterator = -1;
 	};
 }

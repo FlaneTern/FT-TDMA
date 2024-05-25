@@ -192,6 +192,28 @@ namespace WSN
 		return 0;
 	}
 
+	double Distribution::GenerateRandomNumber(std::mt19937_64& rng)
+	{
+		switch (m_DistributionType)
+		{
+		case DistributionType::Exponential:
+			return (*(std::exponential_distribution<double>*)m_Distribution)(rng);
+		case DistributionType::Gamma:
+			return (*(std::gamma_distribution<double>*)m_Distribution)(rng);
+		case DistributionType::Lognormal:
+			return (*(std::lognormal_distribution<double>*)m_Distribution)(rng);
+		case DistributionType::Weibull:
+			return (*(std::weibull_distribution<double>*)m_Distribution)(rng);
+		case DistributionType::Normal:
+			return (*(std::normal_distribution<double>*)m_Distribution)(rng);
+		case DistributionType::Uniform:
+			return (*(std::uniform_real_distribution<double>*)m_Distribution)(rng);
+		}
+
+		throw std::runtime_error("Unknown Distribution Type in Distribution::GenerateRandomNumber");
+		return 0;
+	}
+
 
 	std::string DistributionTypeToString(const DistributionType& dt)
 	{

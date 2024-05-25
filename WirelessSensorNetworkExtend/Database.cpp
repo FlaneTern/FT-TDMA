@@ -14,7 +14,7 @@ namespace WSN
     static constexpr char c_Server[] = "tcp://127.0.0.1:3306\0";
     static constexpr char c_Username[] = "WSN\0";
     static constexpr char c_Password[] = "wsn123\0";
-    static constexpr char c_DatabaseName[] = "WSN2\0";
+    static constexpr char c_DatabaseName[] = "WSN11\0";
 
 
 	// A LOT OF UNFREED STUFF such as driver, connection, and statements. Maybe free these?
@@ -25,7 +25,7 @@ namespace WSN
 	static sql::Driver* s_Driver;
 	static sql::Connection* s_Connection;
 
-    static constexpr uint32_t c_BatchRowCount = 50000 / 12;
+    static constexpr uint32_t c_BatchRowCount = 50000 / 13;
 
     static std::string CreateInsertString(uint32_t argumentCount, uint32_t rowCount)
     {
@@ -65,15 +65,26 @@ namespace WSN
 
 	}
 
-    void Database::Insert(uint64_t simulationID, const SimulationParameters& simulationParameters, const SimulationResults& sr)
+    void Database::Insert(uint64_t simulationID, const SimulationParameters& simulationParameters, const SimulationResults& sr, const SimulationType& st)
     {
         std::cout << "Inserting Simulation " << simulationID << '\n';
         try
         {
-            static sql::PreparedStatement* statement1 = s_Connection->prepareStatement(
+            static sql::PreparedStatement* statement1FTTDMA = s_Connection->prepareStatement(
                 "Insert into "
-                "Simulation(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency)"
+                "SimulationFTTDMA(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency)"
                 " values(?,?,?,?,?,?,?,?,?,?,?,?)");
+
+            static sql::PreparedStatement* statement1RRTDMA = s_Connection->prepareStatement(
+                "Insert into "
+                "SimulationRRTDMA(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency)"
+                " values(?,?,?,?,?,?,?,?,?,?,?,?)");
+
+            sql::PreparedStatement* statement1 = nullptr;
+            if (st == SimulationType::FT_TDMA)
+                statement1 = statement1FTTDMA;
+            else if(st == SimulationType::RR_TDMA)
+                statement1 = statement1RRTDMA;
 
             std::cout << "Inserting Simulation " << simulationID << '\n';
 
@@ -100,14 +111,25 @@ namespace WSN
         }
     }
 
-    void Database::Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes)
+    void Database::Insert(uint64_t simulationID, const std::vector<SensorNode>& sensorNodes, const const SimulationType& st)
     {
         try
         {
-            static sql::PreparedStatement* preparedStatement = s_Connection->prepareStatement(
+            static sql::PreparedStatement* preparedStatementFTTDMA = s_Connection->prepareStatement(
                 "Insert ignore into "
-                "SensorNode(SimulationID, SensorNodeID, PosX, PosY, Parent, Level_, DeltaOpt, CollectionTime, WastedTime, EnergyConsumed, SentPacketTotalDelay, SentPacketCount)" +
-                CreateInsertString(12, c_BatchRowCount));
+                "SensorNodeFTTDMA(SimulationID, SensorNodeID, PosX, PosY, Parent, Level_, DeltaOpt, CollectionTime, WastedTime, EnergyConsumed, SentPacketTotalDelay, SentPacketCount, Color, TotalDataSent)" +
+                CreateInsertString(14, c_BatchRowCount));
+
+            static sql::PreparedStatement* preparedStatementRRTDMA = s_Connection->prepareStatement(
+                "Insert ignore into "
+                "SensorNodeRRTDMA(SimulationID, SensorNodeID, PosX, PosY, Parent, Level_, DeltaOpt, CollectionTime, WastedTime, EnergyConsumed, SentPacketTotalDelay, SentPacketCount, Color, TotalDataSent)" +
+                CreateInsertString(14, c_BatchRowCount));
+
+            sql::PreparedStatement* preparedStatement = nullptr;
+            if (st == SimulationType::FT_TDMA)
+                preparedStatement = preparedStatementFTTDMA;
+            else if (st == SimulationType::RR_TDMA)
+                preparedStatement = preparedStatementRRTDMA;
 
             bool done = false;
             int SNIterator = 0;
@@ -117,18 +139,20 @@ namespace WSN
                 std::cout << "Out of " << sensorNodes.size() << '\n';
                 for (int currentBatchRow = 0; !done && currentBatchRow < c_BatchRowCount; currentBatchRow++)
                 {
-                    preparedStatement->setUInt64(currentBatchRow * 12 + 1, simulationID);
-                    preparedStatement->setUInt64(currentBatchRow * 12 + 2, SNIterator);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 3, sensorNodes[SNIterator].m_Position.X);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 4, sensorNodes[SNIterator].m_Position.Y);
-                    preparedStatement->setInt64(currentBatchRow * 12 + 5, sensorNodes[SNIterator].m_Parent);
-                    preparedStatement->setUInt64(currentBatchRow * 12 + 6, sensorNodes[SNIterator].m_Level);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 7, sensorNodes[SNIterator].m_DeltaOpt);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 8, sensorNodes[SNIterator].m_CollectionTime);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 9, sensorNodes[SNIterator].m_WastedTime);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 10, sensorNodes[SNIterator].m_EnergyConsumed);
-                    preparedStatement->setDouble(currentBatchRow * 12 + 11, sensorNodes[SNIterator].m_SentPacketTotalDelay);
-                    preparedStatement->setUInt64(currentBatchRow * 12 + 12, sensorNodes[SNIterator].m_SentPacketCount);
+                    preparedStatement->setUInt64(currentBatchRow * 14 + 1, simulationID);
+                    preparedStatement->setUInt64(currentBatchRow * 14 + 2, SNIterator);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 3, sensorNodes[SNIterator].m_Position.X);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 4, sensorNodes[SNIterator].m_Position.Y);
+                    preparedStatement->setInt64(currentBatchRow  * 14 + 5, sensorNodes[SNIterator].m_Parent);
+                    preparedStatement->setUInt64(currentBatchRow * 14 + 6, sensorNodes[SNIterator].m_Level);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 7, sensorNodes[SNIterator].m_DeltaOpt);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 8, sensorNodes[SNIterator].m_CollectionTime);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 9, sensorNodes[SNIterator].m_WastedTime);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 10, sensorNodes[SNIterator].m_EnergyConsumed);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 11, sensorNodes[SNIterator].m_SentPacketTotalDelay);
+                    preparedStatement->setUInt64(currentBatchRow * 14 + 12, sensorNodes[SNIterator].m_SentPacketCount);
+                    preparedStatement->setUInt64(currentBatchRow * 14 + 13, sensorNodes[SNIterator].m_Color);
+                    preparedStatement->setDouble(currentBatchRow * 14 + 14, sensorNodes[SNIterator].m_TotalDataSent);
 
                     //std::cout << "here = " << currentBatchRow * 10 + 1 << '\n';
 
@@ -141,18 +165,20 @@ namespace WSN
                         for (int i = currentBatchRow + 1; i < c_BatchRowCount; i++)
                         {
                             //std::cout << "here in i = " << i * 10 + 1 << '\n';
-                            preparedStatement->setUInt64(i * 12 + 1, 0);
-                            preparedStatement->setUInt64(i * 12 + 2, 0);
-                            preparedStatement->setNull(i * 12 + 3, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 4, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 5, sql::DataType::BIGINT);
-                            preparedStatement->setNull(i * 12 + 6, sql::DataType::BIGINT);
-                            preparedStatement->setNull(i * 12 + 7, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 8, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 9, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 10, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 11, sql::DataType::DOUBLE);
-                            preparedStatement->setNull(i * 12 + 12, sql::DataType::BIGINT);
+                            preparedStatement->setUInt64(i * 14 + 1, 0);
+                            preparedStatement->setUInt64(i * 14 + 2, 0);
+                            preparedStatement->setNull(i * 14 + 3, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 4, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 5, sql::DataType::BIGINT);
+                            preparedStatement->setNull(i * 14 + 6, sql::DataType::BIGINT);
+                            preparedStatement->setNull(i * 14 + 7, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 8, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 9, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 10, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 11, sql::DataType::DOUBLE);
+                            preparedStatement->setNull(i * 14 + 12, sql::DataType::BIGINT);
+                            preparedStatement->setNull(i * 14 + 13, sql::DataType::BIGINT);
+                            preparedStatement->setNull(i * 14 + 14, sql::DataType::DOUBLE);
 
                         }
                     }
@@ -176,7 +202,7 @@ namespace WSN
 
     uint64_t Database::GetLatestSimulationID()
     {
-        static sql::PreparedStatement* statement = s_Connection->prepareStatement("select max(SimulationID) from Simulation");
+        static sql::PreparedStatement* statement = s_Connection->prepareStatement("select max(SimulationID) from SimulationFTTDMA");
         sql::ResultSet* result = statement->executeQuery();
 
         result->next();

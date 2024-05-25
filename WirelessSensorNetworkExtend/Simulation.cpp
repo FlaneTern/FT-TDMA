@@ -6,10 +6,13 @@
 namespace WSN
 {
 
-	static constexpr double s_EnergyRateWorking = 0.4;
-	static constexpr double s_EnergyRateDataTransfer = 1.0;
-	static constexpr double s_EnergyTransitionWorkingToTransfer = 20.0;
-	static constexpr double s_EnergyTransitionTransferToWorking = 20.0;
+	//static constexpr double s_EnergyRateWorking = 0.4;
+	//static constexpr double s_EnergyRateDataTransfer = 1.0;
+	//static constexpr double s_EnergyTransitionWorkingToTransfer = 20.0;
+	//static constexpr double s_EnergyTransitionTransferToWorking = 20.0;
+
+	static constexpr double s_EnergyTransitionWorkingToTransfer = 0.0;
+	static constexpr double s_EnergyTransitionTransferToWorking = 0.0;
 
 	//std::vector<SimulationSummaryData> Simulation::s_Summary;
 
@@ -28,6 +31,7 @@ namespace WSN
 		GenerateSNs();
 		CreateSNRoutingTables();
 		CalculateSNDeltaOpts();
+
 
 	}
 
@@ -63,6 +67,8 @@ namespace WSN
 				}
 			}
 		}
+
+
 	}
 
 	void Simulation::CreateSNRoutingTables()
@@ -80,12 +86,14 @@ namespace WSN
 
 		using namespace std;
 
-		short n, limit = 1000, spare = 5;
+		const short spare = 5;
+		const float transmissionRange = 200; // dummy number
+		const float interferenceRange = 25; // dummy number
 
 		class Node {
 		public:
 			float x, y;
-			short tier, index;
+			short tier, index, color = -1, degree = 0;
 			vector <Node> route;
 			Node(float arg1, float arg2, short arg3, short arg4) {
 				x = arg1;
@@ -103,7 +111,7 @@ namespace WSN
 			return sqrt((node1.x - node2.x) * (node1.x - node2.x) + (node1.y - node2.y) * (node1.y - node2.y));
 		};
 
-		auto connect = [&]() {
+		auto findParent = [&]() {
 			for (auto& i : node) {
 				if (i.tier) {
 					vector < pair <Node, float> > pos;
@@ -115,11 +123,39 @@ namespace WSN
 						return ll.second < rr.second;
 						});
 					for (short j = 0; j < spare; ++j)
-						i.route.push_back(pos[j].first);
+						if (pos[j].second <= transmissionRange)
+							i.route.push_back(pos[j].first);
 				}
 			}
 		};
 
+		auto findColor = [&]() { // i cant name shit
+			for (auto& i : node)
+				for (auto j : node)
+					if (getDistance(i, j) <= interferenceRange)
+						++i.degree;
+			sort(node.begin(), node.end(), [&](Node node1, Node node2) {
+				return node1.degree > node2.degree;
+				});
+			bool exist = 1;
+			for (short i = 0; exist; ++i) {
+				exist = 0;
+				for (auto& j : node) {
+					if (j.color != -1)
+						continue;
+					bool con = 0;
+					for (auto& k : node)
+						if (k.color == i && getDistance(j, k) <= interferenceRange) {
+							con = 1;
+							break;
+						}
+					if (!con) {
+						j.color = i;
+						exist = 1;
+					}
+				}
+			}
+		};
 
 
 		for (short i = 0, l; i < m_SensorNodes.size(); ++i) {
@@ -127,7 +163,8 @@ namespace WSN
 			node.push_back(Node(m_SensorNodes[i].m_Position.X, m_SensorNodes[i].m_Position.Y, m_SensorNodes[i].m_Level, i));
 		}
 
-		connect();
+		findParent();
+		findColor();
 
 		//for (auto i : node) {
 		//	cout << i.index << ":";
@@ -145,9 +182,8 @@ namespace WSN
 				if(node[i].route.size() > 0)
 					m_SensorNodes[node[i].index].m_Parent = node[i].route[0].index;
 			}
+			m_SensorNodes[node[i].index].m_Color = node[i].color;
 		}
-
-
 #endif
 
 
@@ -191,6 +227,9 @@ namespace WSN
 		{
 			if (m_SensorNodes[i].m_Parent == -1)
 				continue;
+
+			if (m_SensorNodes[i].m_Parent == -2)
+				throw std::runtime_error("An SN does not have any parents !");
 
 			children[m_SensorNodes[i].m_Parent].push_back(i);
 		}
@@ -351,7 +390,17 @@ namespace WSN
 
 	void Simulation::Run()
 	{
-		static constexpr double failGenerationDurationMultiplier = 1.0;
+		double seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+		InnerRun(SimulationType::FT_TDMA, seed);
+		Reset();
+		InnerRun(SimulationType::RR_TDMA, seed);
+	}
+
+	void Simulation::InnerRun(SimulationType simulationType, double seed)
+	{
+		std::mt19937_64 innerRNG(seed);
+
+		static constexpr double failGenerationDurationMultiplier = 0.1;
 
 		SimulationResults& sr = m_SimulationResults;
 			
@@ -389,7 +438,7 @@ namespace WSN
 			double timeToNextFailure;
 			while (currentTime < failGenerationDurationMultiplier * m_SimulationParameters.TotalDurationToBeTransferred)
 			{
-				timeToNextFailure = m_SimulationParameters.FailureDistribution.GenerateRandomNumber();
+				timeToNextFailure = m_SimulationParameters.FailureDistribution.GenerateRandomNumber(innerRNG);
 				currentTime += timeToNextFailure;
 				// LOOK AT THIS
 				sr.Failures.push_back({ (uint64_t)i, currentTime });
@@ -398,20 +447,33 @@ namespace WSN
 			}
 		}
 
+		int colorCount = -1;
+		for (int i = 0; i < m_SensorNodes.size(); i++)
+			colorCount = std::max(colorCount, (int)m_SensorNodes[i].m_Color);
+		colorCount++;
+		std::cout << "colorCount = " << colorCount << '\n';
+
 		double transferredTotalDuration = 0;
 		double currentTime = 0.0;
 		int failureCount = 0;
 
-		while (transferredTotalDuration < m_SimulationParameters.TotalDurationToBeTransferred)
-		{
+		int superSlotIterator = 0;
 
+		bool condition = true;
+
+		while (condition)
+		{
 			auto currentEvent = eventQueue.top();
 			currentTime = currentEvent.Timestamp;
 			auto& currentState = currentEvent.State;
 			auto& currentSN = currentEvent.SNID;
 			eventQueue.pop();
 
+			superSlotIterator = currentTime / (m_SimulationParameters.TransferTime * colorCount);
+
 			//std::cout << "here = " << currentSN << '\n';
+			//if(eventQueue.size() > 99)
+			//	std::cout << "eventQueue.size() " << eventQueue.size() << '\n';
 
 
 			// deciding the next state to put in eventQueue
@@ -420,8 +482,74 @@ namespace WSN
 				WorkingState nextState;
 				if (currentState == WorkingState::Collection)
 				{
-					nextTime += m_SensorNodes[currentSN].m_DeltaOpt;
+					if (simulationType == SimulationType::FT_TDMA)
+					{
+						//double optimalTime = currentTime + m_SensorNodes[currentSN].m_DeltaOpt;
+						//double clammedOptimalTime = (int)((currentTime) / (m_SensorNodes[currentSN].m_DeltaOpt + m_SimulationParameters.TransferTime)) * (m_SensorNodes[currentSN].m_DeltaOpt + m_SimulationParameters.TransferTime) + m_SensorNodes[currentSN].m_DeltaOpt;
+						
+
+#if 0
+						// now newtime is equal to timeslotstart
+						nextTime = (int)((currentTime + m_SensorNodes[currentSN].m_DeltaOpt) / (m_SimulationParameters.TransferTime * colorCount)) * m_SimulationParameters.TransferTime * colorCount + m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
+
+						while(nextTime < currentTime)
+							nextTime += m_SimulationParameters.TransferTime * colorCount;
+
+						//while (std::abs(nextTime - (currentTime + m_SensorNodes[currentSN].m_DeltaOpt)) > 0.5 * m_SimulationParameters.TransferTime * colorCount &&
+						//	std::abs(nextTime + m_SimulationParameters.TransferTime * colorCount - (currentTime + m_SensorNodes[currentSN].m_DeltaOpt)) < std::abs(nextTime - (currentTime + m_SensorNodes[currentSN].m_DeltaOpt)))
+						while (std::abs(nextTime + m_SimulationParameters.TransferTime * colorCount - (currentTime + m_SensorNodes[currentSN].m_DeltaOpt)) < std::abs(nextTime - (currentTime + m_SensorNodes[currentSN].m_DeltaOpt)))
+							nextTime += m_SimulationParameters.TransferTime * colorCount;
+#elif 0
+						
+						
+						//// int of the optimaliterator
+						//double optimalTime = (int)((currentTime) / (m_SensorNodes[currentSN].m_DeltaOpt + m_SimulationParameters.TransferTime)) * (m_SensorNodes[currentSN].m_DeltaOpt + m_SimulationParameters.TransferTime) + m_SensorNodes[currentSN].m_DeltaOpt;
+						//// int of the super time slot
+						//nextTime = (int)((optimalTime) / (m_SimulationParameters.TransferTime * colorCount)) * m_SimulationParameters.TransferTime * colorCount + m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
+						//while(nextTime < currentTime)
+						//	nextTime += m_SimulationParameters.TransferTime * colorCount;
+						//while(std::abs(nextTime - optimalTime) > std::abs(nextTime + m_SimulationParameters.TransferTime * colorCount - optimalTime))
+						//	nextTime += m_SimulationParameters.TransferTime * colorCount;
+#elif 1
+						double optimalTime = currentTime + m_SensorNodes[currentSN].m_DeltaOpt;
+						nextTime = m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
+						if (nextTime < currentTime)
+							nextTime += (int)((currentTime - nextTime) / (m_SimulationParameters.TransferTime * colorCount)) * m_SimulationParameters.TransferTime * colorCount;
+						while (nextTime >= currentTime)
+							nextTime -= m_SimulationParameters.TransferTime * colorCount;
+						nextTime += m_SimulationParameters.TransferTime * colorCount;
+						while(std::abs(nextTime - optimalTime) > std::abs(nextTime + m_SimulationParameters.TransferTime * colorCount - optimalTime))
+							nextTime += m_SimulationParameters.TransferTime * colorCount;
+#endif
+
+					}
+					else if(simulationType == SimulationType::RR_TDMA)
+					{
+#if 0
+						//nextTime = (int)((currentTime + m_SensorNodes[currentSN].m_DeltaOpt) / (m_SimulationParameters.TransferTime * colorCount)) * m_SimulationParameters.TransferTime * colorCount + m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
+
+						//while (nextTime < currentTime)
+						//	nextTime += m_SimulationParameters.TransferTime * colorCount;
+#elif 1
+						nextTime = m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
+						if (nextTime < currentTime)
+							nextTime += (int)((currentTime - nextTime) / (m_SimulationParameters.TransferTime * colorCount)) * m_SimulationParameters.TransferTime * colorCount;
+						while (nextTime >= currentTime)
+							nextTime -= m_SimulationParameters.TransferTime * colorCount;
+						nextTime += m_SimulationParameters.TransferTime * colorCount;
+
+#endif
+						//if(nextTime < currentTime)
+						//	std::cout << "NEXTTIME = " << nextTime << '\n';
+					}
 					nextState = WorkingState::Transfer;
+
+					//std::cout << "a = " << nextTime << '\n';
+					//std::cout << "b = " << m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime << '\n';
+					//std::cout << "c = " << (int)((currentTime + m_SensorNodes[currentSN].m_DeltaOpt) / (m_SimulationParameters.TransferTime * colorCount)) << '\n';
+					//std::cout << "d = " << m_SensorNodes[currentSN].m_Color << '\n';
+					//std::cout << "e = " << colorCount << '\n';
+					//std::cout << "Next Slot = " << nextTime << '\n';
 				}
 				else if (currentState == WorkingState::Transfer)
 				{
@@ -452,12 +580,15 @@ namespace WSN
 				if (currentState == WorkingState::Collection) // handles the initialization
 				{
 					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
+					m_SensorNodes[currentSN].m_CurrentPacketIterator = m_SensorNodes[currentSN].m_Packets.size() - 1;
 				}
 				else if (currentState == WorkingState::Transfer)
 				{
-					m_SensorNodes[currentSN].m_CollectionTime += m_SensorNodes[currentSN].m_DeltaOpt;
-					m_SensorNodes[currentSN].m_CurrentData += m_SensorNodes[currentSN].m_DeltaOpt;
-					m_SensorNodes[currentSN].m_EnergyConsumed += m_SensorNodes[currentSN].m_DeltaOpt * s_EnergyRateWorking + s_EnergyTransitionWorkingToTransfer;
+					m_SensorNodes[currentSN].m_CollectionTime += currentTime - previousEvents[currentSN].Timestamp;
+					m_SensorNodes[currentSN].m_CurrentData += currentTime - previousEvents[currentSN].Timestamp;
+					m_SensorNodes[currentSN].m_EnergyConsumed += currentTime - previousEvents[currentSN].Timestamp * s_EnergyRateWorking + s_EnergyTransitionWorkingToTransfer;
+					//m_SensorNodes[currentSN].m_Packets[m_SensorNodes[currentSN].m_CurrentPacketIterator].Size += currentTime - previousEvents[currentSN].Timestamp; // look at this
+					m_SensorNodes[currentSN].m_Packets[m_SensorNodes[currentSN].m_CurrentPacketIterator].Size += currentTime - m_SensorNodes[currentSN].m_Packets[m_SensorNodes[currentSN].m_CurrentPacketIterator].InitialTimestamp; // look at this
 				}
 				else if (currentState == WorkingState::Recovery)
 				{
@@ -465,6 +596,7 @@ namespace WSN
 					failureCount++;
 					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateWorking;
 					m_SensorNodes[currentSN].m_Packets.clear();
+					m_SensorNodes[currentSN].m_CurrentPacketIterator = - 1;
 				}
 			}
 			else if (previousEvents[currentSN].State == WorkingState::Transfer)
@@ -487,6 +619,8 @@ namespace WSN
 						{
 							m_SensorNodes[m_SensorNodes[currentSN].m_Packets[i].InitialSNID].m_SentPacketTotalDelay += currentTime - m_SensorNodes[currentSN].m_Packets[i].InitialTimestamp;
 							m_SensorNodes[m_SensorNodes[currentSN].m_Packets[i].InitialSNID].m_SentPacketCount++;
+
+							m_SensorNodes[m_SensorNodes[currentSN].m_Packets[i].InitialSNID].m_TotalDataSent += m_SensorNodes[currentSN].m_Packets[i].Size;
 						}
 
 					}
@@ -497,6 +631,7 @@ namespace WSN
 					m_SensorNodes[currentSN].m_CurrentData = 0;
 					m_SensorNodes[currentSN].m_EnergyConsumed += m_SimulationParameters.TransferTime * s_EnergyRateDataTransfer + s_EnergyTransitionTransferToWorking;
 					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
+					m_SensorNodes[currentSN].m_CurrentPacketIterator = m_SensorNodes[currentSN].m_Packets.size() - 1;
 				}
 				else if (currentState == WorkingState::Transfer) {} // not possible
 				else if (currentState == WorkingState::Recovery) // WARNING : PARTIAL TRANSFER FAILS	
@@ -506,6 +641,7 @@ namespace WSN
 					failureCount++;
 					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateDataTransfer;
 					m_SensorNodes[currentSN].m_Packets.clear();
+					m_SensorNodes[currentSN].m_CurrentPacketIterator = - 1;
 				}
 			}
 			else if (previousEvents[currentSN].State == WorkingState::Recovery)
@@ -514,6 +650,7 @@ namespace WSN
 				{
 					m_SensorNodes[currentSN].m_WastedTime += m_SimulationParameters.RecoveryTime;
 					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
+					m_SensorNodes[currentSN].m_CurrentPacketIterator = m_SensorNodes[currentSN].m_Packets.size() - 1;
 				}
 				else if (currentState == WorkingState::Transfer) {} // not possible
 				else if (currentState == WorkingState::Recovery)
@@ -521,14 +658,29 @@ namespace WSN
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
 					m_SensorNodes[currentSN].m_Packets.clear();
+					m_SensorNodes[currentSN].m_CurrentPacketIterator =  - 1;
 				}
 			}
 
 			// throw std::runtime_error("Exceeded the last failure point!");;
-
-
 			previousEvents[currentSN] = currentEvent;
+			
+			if (m_SensorNodes[currentSN].m_Packets.size() > 1000)
+				std::cout << "m_SensorNodes[currentSN].m_Packets.size() = " << m_SensorNodes[currentSN].m_Packets.size() << '\n';
 
+
+			//condition = transferredTotalDuration < m_SimulationParameters.TotalDurationToBeTransferred;
+
+			//condition = false;
+			//for (int i = 0; i < m_SensorNodes.size(); i++)
+			//{
+			//	if (m_SensorNodes[i].m_TotalDataSent <= m_SimulationParameters.TotalDurationToBeTransferred)
+			//	{
+			//		condition = true;
+			//		break;
+			//	}
+			//}
+			condition = currentTime < m_SimulationParameters.TotalDurationToBeTransferred;
 		}
 
 		sr.ActualTotalDuration = currentTime;
@@ -544,11 +696,29 @@ namespace WSN
 		std::cout << "Actual Total Duration = " << sr.ActualTotalDuration << '\n';
 
 #if not _DEBUG
-		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters, m_SimulationResults);
-		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes);
+		Database::GetDatabase()->Insert(m_SimulationID, m_SimulationParameters, m_SimulationResults, simulationType);
+		Database::GetDatabase()->Insert(m_SimulationID, m_SensorNodes, simulationType);
 #endif
 	}
 
+	void Simulation::Reset()
+	{
+		for (int i = 0; i < m_SensorNodes.size(); i++)
+		{
+			m_SensorNodes[i].m_CollectionTime = 0;
+			m_SensorNodes[i].m_CurrentData = 0;
+			m_SensorNodes[i].m_WastedTime = 0;
+			m_SensorNodes[i].m_EnergyConsumed = 0;
+			m_SensorNodes[i].m_SentPacketTotalDelay = 0;
+			m_SensorNodes[i].m_SentPacketCount = 0;
+			m_SensorNodes[i].m_Packets.clear();
+			m_SensorNodes[i].m_TotalDataSent = 0;
+		}
 
+		m_SimulationResults = SimulationResults();
+		m_SimulationResults.ActualTotalDuration = 0;
+		m_SimulationResults.FinalFailureIndex = 0;
+		m_SimulationResults.Failures.clear();
+	}
 
 }
