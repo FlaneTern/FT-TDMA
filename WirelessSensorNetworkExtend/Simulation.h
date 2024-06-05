@@ -44,6 +44,11 @@ namespace WSN
 		std::vector<double> LevelRadius;
 		std::vector<uint64_t> LevelSNCount;
 
+		double EnergyRateWorking;
+		double EnergyRateTransfer;
+
+		double TransmissionRange;
+		double InterferenceRange;
 	};
 
 

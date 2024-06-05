@@ -87,8 +87,6 @@ namespace WSN
 		using namespace std;
 
 		const short spare = 5;
-		const float transmissionRange = 200; // dummy number
-		const float interferenceRange = 25; // dummy number
 
 		class Node {
 		public:
@@ -123,7 +121,7 @@ namespace WSN
 						return ll.second < rr.second;
 						});
 					for (short j = 0; j < spare; ++j)
-						if (pos[j].second <= transmissionRange)
+						if (pos[j].second <= m_SimulationParameters.TransmissionRange)
 							i.route.push_back(pos[j].first);
 				}
 			}
@@ -132,7 +130,7 @@ namespace WSN
 		auto findColor = [&]() { // i cant name shit
 			for (auto& i : node)
 				for (auto j : node)
-					if (getDistance(i, j) <= interferenceRange)
+					if (getDistance(i, j) <= m_SimulationParameters.InterferenceRange)
 						++i.degree;
 			sort(node.begin(), node.end(), [&](Node node1, Node node2) {
 				return node1.degree > node2.degree;
@@ -145,7 +143,7 @@ namespace WSN
 						continue;
 					bool con = 0;
 					for (auto& k : node)
-						if (k.color == i && getDistance(j, k) <= interferenceRange) {
+						if (k.color == i && getDistance(j, k) <= m_SimulationParameters.InterferenceRange) {
 							con = 1;
 							break;
 						}
@@ -432,6 +430,7 @@ namespace WSN
 		// Generating failure timestamps
 		std::vector<std::vector<double>> SNsFailureTimestamps(m_SensorNodes.size());
 		std::vector<int> SNsFailureTimestampsIterator(m_SensorNodes.size(), 0);
+#if 1
 		for(int i = 0; i < m_SensorNodes.size(); i++)
 		{
 			double currentTime = 0;
@@ -446,6 +445,7 @@ namespace WSN
 				//eventQueue.push({ SNID, WorkingState::Recovery, currentTime });
 			}
 		}
+#endif
 
 		int colorCount = -1;
 		for (int i = 0; i < m_SensorNodes.size(); i++)
@@ -510,7 +510,7 @@ namespace WSN
 						//	nextTime += m_SimulationParameters.TransferTime * colorCount;
 						//while(std::abs(nextTime - optimalTime) > std::abs(nextTime + m_SimulationParameters.TransferTime * colorCount - optimalTime))
 						//	nextTime += m_SimulationParameters.TransferTime * colorCount;
-#elif 1
+#elif 0
 						double optimalTime = currentTime + m_SensorNodes[currentSN].m_DeltaOpt;
 						nextTime = m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
 						if (nextTime < currentTime)
@@ -519,6 +519,16 @@ namespace WSN
 							nextTime -= m_SimulationParameters.TransferTime * colorCount;
 						nextTime += m_SimulationParameters.TransferTime * colorCount;
 						while(std::abs(nextTime - optimalTime) > std::abs(nextTime + m_SimulationParameters.TransferTime * colorCount - optimalTime))
+							nextTime += m_SimulationParameters.TransferTime * colorCount;
+#elif 1
+						double optimalTime = currentTime + m_SensorNodes[currentSN].m_DeltaOpt;
+						nextTime = m_SensorNodes[currentSN].m_Color * m_SimulationParameters.TransferTime;
+						if (nextTime < currentTime)
+							nextTime += (int)((currentTime - nextTime) / (m_SimulationParameters.TransferTime * colorCount)) * m_SimulationParameters.TransferTime * colorCount;
+						while (nextTime >= currentTime)
+							nextTime -= m_SimulationParameters.TransferTime * colorCount;
+						nextTime += m_SimulationParameters.TransferTime * colorCount;
+						while (nextTime < optimalTime)
 							nextTime += m_SimulationParameters.TransferTime * colorCount;
 #endif
 
@@ -586,7 +596,7 @@ namespace WSN
 				{
 					m_SensorNodes[currentSN].m_CollectionTime += currentTime - previousEvents[currentSN].Timestamp;
 					m_SensorNodes[currentSN].m_CurrentData += currentTime - previousEvents[currentSN].Timestamp;
-					m_SensorNodes[currentSN].m_EnergyConsumed += currentTime - previousEvents[currentSN].Timestamp * s_EnergyRateWorking + s_EnergyTransitionWorkingToTransfer;
+					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * m_SimulationParameters.EnergyRateWorking + s_EnergyTransitionWorkingToTransfer;
 					//m_SensorNodes[currentSN].m_Packets[m_SensorNodes[currentSN].m_CurrentPacketIterator].Size += currentTime - previousEvents[currentSN].Timestamp; // look at this
 					m_SensorNodes[currentSN].m_Packets[m_SensorNodes[currentSN].m_CurrentPacketIterator].Size += currentTime - m_SensorNodes[currentSN].m_Packets[m_SensorNodes[currentSN].m_CurrentPacketIterator].InitialTimestamp; // look at this
 				}
@@ -594,7 +604,7 @@ namespace WSN
 				{
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
-					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateWorking;
+					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * m_SimulationParameters.EnergyRateWorking;
 					m_SensorNodes[currentSN].m_Packets.clear();
 					m_SensorNodes[currentSN].m_CurrentPacketIterator = - 1;
 				}
@@ -629,7 +639,7 @@ namespace WSN
 
 					m_SensorNodes[currentSN].m_WastedTime += m_SimulationParameters.TransferTime;
 					m_SensorNodes[currentSN].m_CurrentData = 0;
-					m_SensorNodes[currentSN].m_EnergyConsumed += m_SimulationParameters.TransferTime * s_EnergyRateDataTransfer + s_EnergyTransitionTransferToWorking;
+					m_SensorNodes[currentSN].m_EnergyConsumed += m_SimulationParameters.TransferTime * m_SimulationParameters.EnergyRateTransfer + s_EnergyTransitionTransferToWorking;
 					m_SensorNodes[currentSN].m_Packets.push_back({ currentSN, currentTime });
 					m_SensorNodes[currentSN].m_CurrentPacketIterator = m_SensorNodes[currentSN].m_Packets.size() - 1;
 				}
@@ -639,7 +649,7 @@ namespace WSN
 					m_SensorNodes[currentSN].m_CurrentData = 0;
 					m_SensorNodes[currentSN].m_WastedTime += currentTime - previousEvents[currentSN].Timestamp;
 					failureCount++;
-					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * s_EnergyRateDataTransfer;
+					m_SensorNodes[currentSN].m_EnergyConsumed += (currentTime - previousEvents[currentSN].Timestamp) * m_SimulationParameters.EnergyRateTransfer;
 					m_SensorNodes[currentSN].m_Packets.clear();
 					m_SensorNodes[currentSN].m_CurrentPacketIterator = - 1;
 				}
@@ -671,16 +681,16 @@ namespace WSN
 
 			//condition = transferredTotalDuration < m_SimulationParameters.TotalDurationToBeTransferred;
 
-			//condition = false;
-			//for (int i = 0; i < m_SensorNodes.size(); i++)
-			//{
-			//	if (m_SensorNodes[i].m_TotalDataSent <= m_SimulationParameters.TotalDurationToBeTransferred)
-			//	{
-			//		condition = true;
-			//		break;
-			//	}
-			//}
-			condition = currentTime < m_SimulationParameters.TotalDurationToBeTransferred;
+			condition = false;
+			for (int i = 0; i < m_SensorNodes.size(); i++)
+			{
+				if (m_SensorNodes[i].m_TotalDataSent <= m_SimulationParameters.TotalDurationToBeTransferred)
+				{
+					condition = true;
+					break;
+				}
+			}
+			//condition = currentTime < m_SimulationParameters.TotalDurationToBeTransferred;
 		}
 
 		sr.ActualTotalDuration = currentTime;

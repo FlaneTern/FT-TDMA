@@ -14,7 +14,7 @@ namespace WSN
     static constexpr char c_Server[] = "tcp://127.0.0.1:3306\0";
     static constexpr char c_Username[] = "WSN\0";
     static constexpr char c_Password[] = "wsn123\0";
-    static constexpr char c_DatabaseName[] = "WSN11\0";
+    static constexpr char c_DatabaseName[] = "WSN17\0";
 
 
 	// A LOT OF UNFREED STUFF such as driver, connection, and statements. Maybe free these?
@@ -25,7 +25,7 @@ namespace WSN
 	static sql::Driver* s_Driver;
 	static sql::Connection* s_Connection;
 
-    static constexpr uint32_t c_BatchRowCount = 50000 / 13;
+    static constexpr uint32_t c_BatchRowCount = 50000 / 14;
 
     static std::string CreateInsertString(uint32_t argumentCount, uint32_t rowCount)
     {
@@ -72,13 +72,13 @@ namespace WSN
         {
             static sql::PreparedStatement* statement1FTTDMA = s_Connection->prepareStatement(
                 "Insert into "
-                "SimulationFTTDMA(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency)"
-                " values(?,?,?,?,?,?,?,?,?,?,?,?)");
+                "SimulationFTTDMA(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency, EnergyRateWorking, EnergyRateTransfer)"
+                " values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
 
             static sql::PreparedStatement* statement1RRTDMA = s_Connection->prepareStatement(
                 "Insert into "
-                "SimulationRRTDMA(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency)"
-                " values(?,?,?,?,?,?,?,?,?,?,?,?)");
+                "SimulationRRTDMA(SimulationID, TotalDurationToBeTransferred, TransferTime, RecoveryTime, FailureDistributionType, FailureMean, FailureStddev, FailureParameter1, FailureParameter2, ActualTotalDuration, FinalFailureIndex, CWSNEfficiency, EnergyRateWorking, EnergyRateTransfer)"
+                " values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
 
             sql::PreparedStatement* statement1 = nullptr;
             if (st == SimulationType::FT_TDMA)
@@ -100,6 +100,8 @@ namespace WSN
             statement1->setDouble(10, sr.ActualTotalDuration);
             statement1->setUInt64(11, sr.FinalFailureIndex);
             statement1->setDouble(12, sr.CWSNEfficiency);
+            statement1->setDouble(13, simulationParameters.EnergyRateWorking);
+            statement1->setDouble(14, simulationParameters.EnergyRateTransfer);
             statement1->execute();
             s_Connection->commit();
 

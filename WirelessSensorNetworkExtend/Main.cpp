@@ -7,28 +7,82 @@
 //static constexpr int s_TotalDurationToBeTransferred = 3600;
 //static constexpr double s_TotalDurationToBeTransferred = 3600.0 * 24 * 90 * 100;
 static constexpr double s_TotalDurationToBeTransferred = 3600.0 * 24 * 90;
-static constexpr double s_TransferTime = 60;
+//static constexpr double s_TransferTime = 60;
 //static constexpr double s_TransferTime = 60;
 static constexpr double s_RecoveryTime = 30;
 
 int main()
 {
 
+	std::vector<double> interferenceRanges =
+	{
+		//10,
+		//25,
+		//50,
+		//100,
+		//200,
+		//250,
+		300
+	};
+
 	std::vector<double> transferTimes =
 	{
-		30.0 * 1,
+		//30.0 * 1,
+		//30.0 * 2,
+		//30.0 * 10,
+		//30.0 * 50,
 		30.0 * 2,
-		30.0 * 10,
-		30.0 * 50,
 	};
 
 	std::vector<double> means =
 	{
+		//3600.0 * 1,
+		//3600.0 * 2,
+		//3600.0 * 10,
+		//3600.0 * 50,
 		3600.0 * 1,
-		3600.0 * 2,
-		3600.0 * 10,
-		3600.0 * 50,
+		3600.0 * 8,
 	};
+
+
+
+	std::vector<double> energyRateTransfers =
+	{
+		//0.05,
+		//0.1,
+		//0.2,
+		//0.5,
+		//1.0,
+		//2.0,
+		//5.0,
+		//10.0,
+		//20.0,
+		//8.0,
+		0.4,
+	};
+
+	std::vector<double> energyRateWorkings =
+	{
+		//20.0,
+		//10.0,
+		//5.0,
+		//2.0,
+		//1.0,
+		//0.5,
+		//0.2,
+		//0.1,
+		//0.05,
+		//1.0,
+		0.05,
+	};
+
+	//std::vector<double> energyRateWorkings;
+	//for (int i = 0; i < energyRatioTransferOverWorking.size(); i++)
+	//{
+	//	energyRateTransfers.push_back(1.0);
+	//	energyRateWorkings.push_back(energyRateTransfers[i] / energyRatioTransferOverWorking[i]);
+	//}
+	
 
 	for (int redo = 0; redo < 1; redo++)
 	{
@@ -83,27 +137,40 @@ int main()
 									//{ 30 * 1, 60 * 1, 10 * 1 },
 									//{ 30 * 1, 10 * 1, 60 * 1 },
 									//{ 10 * 1, 60 * 1, 30 * 1 },
-									{ 10 * 1, 30 * 1, 60 * 1 },
+									//{ 10 * 1, 30 * 1, 60 * 1 },
+									{ 4 },
 								};
 						
 								for (auto levelSNCount : levelSNCounts)
 								{
-									WSN::Distribution failDist(failType, currentMean, currentStddev);
-									WSN::SimulationParameters sp =
+									for (int energyRateIterator = 0; energyRateIterator < energyRateTransfers.size(); energyRateIterator++)
 									{
-										totalDurationToBeTransferred,
-										transferTime,
-										s_RecoveryTime,
-										failDist,
-										{ 50, 100, 150 },
-										levelSNCount
-									};
+										for (auto& interferenceRange : interferenceRanges)
+										{
+											WSN::Distribution failDist(failType, currentMean, currentStddev);
+											WSN::SimulationParameters sp =
+											{
+												totalDurationToBeTransferred,
+												transferTime,
+												s_RecoveryTime,
+												failDist,
+												//{ 50, 100, 150 },
+												{ 50 },
+												levelSNCount,
+												energyRateWorkings[energyRateIterator],
+												energyRateTransfers[energyRateIterator],
+												200,
+												interferenceRange
+											};
 
-									WSN::Simulation* Si = new WSN::Simulation(sp);
+											WSN::Simulation* Si = new WSN::Simulation(sp);
 
-									Si->Run();
+											Si->Run();
 
-									delete Si;
+											delete Si;
+
+										}
+									}
 								}
 
 							}
