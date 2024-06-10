@@ -51,5 +51,7 @@ namespace WSN
 		std::vector<Packet> m_Packets;
 
 		int m_CurrentPacketIterator = -1;
+
+		int64_t m_CurrentParent;
 	};
 }

@@ -65,6 +65,7 @@ namespace WSN
 	{
 	public:
 		Simulation(SimulationParameters sp);
+		Simulation(SimulationParameters sp, std::vector<Position> SNLocations);
 
 
 		/// <summary>

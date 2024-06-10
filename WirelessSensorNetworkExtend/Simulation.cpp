@@ -32,6 +32,9 @@ namespace WSN
 		CreateSNRoutingTables();
 		CalculateSNDeltaOpts();
 
+		std::cout << "\n\nPrintingSNLocations...";
+		for (int i = 0; i < m_SensorNodes.size(); i++)
+			std::cout << "{" << m_SensorNodes[i].m_Position.X << ", " << m_SensorNodes[i].m_Position.Y << "},\n";
 
 	}
 
@@ -63,12 +66,51 @@ namespace WSN
 							(uint64_t)i
 						}
 					);
+					m_SensorNodes.back().m_CurrentParent = m_SensorNodes.back().m_Parent;
 					SNCount++;
 				}
 			}
 		}
 
 
+	}
+
+	Simulation::Simulation(SimulationParameters sp, std::vector<Position> SNLocations)
+		: m_SimulationParameters(sp)
+	{
+#if not _DEBUG
+		static uint64_t currentSimulationID = Database::GetDatabase()->GetLatestSimulationID();
+#else
+		static uint64_t currentSimulationID = 1;
+#endif
+
+		currentSimulationID++;
+		m_SimulationID = currentSimulationID;
+
+		for (int i = 0; i < SNLocations.size(); i++)
+		{
+			int level = 0;
+			while (std::sqrt(SNLocations[i].X * SNLocations[i].X + SNLocations[i].Y * SNLocations[i].Y) > m_SimulationParameters.LevelRadius[level])
+			{
+				level++;
+				if (level >= m_SimulationParameters.LevelRadius.size())
+					throw std::runtime_error("SN is located outside of the highest level!");
+			}
+			m_SensorNodes.push_back(
+				{
+					{SNLocations[i].X, SNLocations[i].Y},
+					(int64_t)-2,
+					(uint64_t)level
+				}
+			);
+		}
+
+		CreateSNRoutingTables();
+		CalculateSNDeltaOpts();
+
+		std::cout << "\n\nPrintingSNLocations...";
+		for (int i = 0; i < m_SensorNodes.size(); i++)
+			std::cout << "{" << m_SensorNodes[i].m_Position.X << ", " << m_SensorNodes[i].m_Position.Y << "},\n";
 	}
 
 	void Simulation::CreateSNRoutingTables()
@@ -177,8 +219,11 @@ namespace WSN
 				m_SensorNodes[node[i].index].m_Parent = -1;
 			else
 			{
-				if(node[i].route.size() > 0)
+				if (node[i].route.size() > 0)
+				{
 					m_SensorNodes[node[i].index].m_Parent = node[i].route[0].index;
+					m_SensorNodes[node[i].index].m_CurrentParent = m_SensorNodes[node[i].index].m_Parent;
+				}
 			}
 			m_SensorNodes[node[i].index].m_Color = node[i].color;
 		}
