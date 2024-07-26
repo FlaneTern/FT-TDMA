@@ -49,6 +49,8 @@ namespace WSN
 
 		double TransmissionRange;
 		double InterferenceRange;
+
+		bool MCREnabled;
 	};
 
 
@@ -95,5 +97,8 @@ namespace WSN
 		void GenerateSNs();
 		void CreateSNRoutingTables();
 		void CalculateSNDeltaOpts();
+
+		void RerouteMCRFailure(uint64_t ParentSNID);
+		void RerouteMCRRecover(uint64_t ParentSNID);
 	};
 }

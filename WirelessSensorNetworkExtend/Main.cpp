@@ -9,7 +9,7 @@
 static constexpr double s_TotalDurationToBeTransferred = 3600.0 * 24 * 90;
 //static constexpr double s_TransferTime = 60;
 //static constexpr double s_TransferTime = 60;
-static constexpr double s_RecoveryTime = 30;
+static constexpr double s_RecoveryTime = 3600.0 * 24 * 1;
 
 int main()
 {
@@ -22,6 +22,7 @@ int main()
 	//	{-11.4823, 5.67111},
 	//};
 
+	std::vector<bool> MCREnabled = { true, false };
 
 	// SN Counts for each level: 10 30 60
 	std::vector<WSN::Position> SNlocations =
@@ -128,6 +129,73 @@ int main()
 		{-114.833, -37.5648},
 	};
 
+	// SN Counts for each level: 5 15 30
+	//std::vector<WSN::Position> SNlocations =
+	//{
+	//	{-10.0373, -36.9948},
+	//	{ -43.399, -10.915 },
+	//	{ 40.4403, 12.854 },
+	//	{ 32.7396, -25.967 },
+	//	{ 39.996, 24.477 },
+	//	{ -14.054, 61.1594 },
+	//	{ 17.7775, -97.9849 },
+	//	{ -12.9659, -70.9714 },
+	//	{ 90.741, 25.1639 },
+	//	{ 60.5863, 73.0635 },
+	//	{ 26.7284, -93.2101 },
+	//	{ -55.2893, -14.5562 },
+	//	{ 49.6141, -8.19067 },
+	//	{ -71.889, -8.69219 },
+	//	{ 7.96687, -53.214 },
+	//	{ -65.615, -14.7924 },
+	//	{ -63.1501, 13.6051 },
+	//	{ 85.5553, 11.6911 },
+	//	{ -58.5221, -62.0905 },
+	//	{ 51.7534, -51.7153 },
+	//	{ 122.29, 27.784 },
+	//	{ 5.97498, -110.695 },
+	//	{ 51.3961, -137.378 },
+	//	{ 75.2227, -99.4351 },
+	//	{ 11.545, 105.867 },
+	//	{ -125.584, 23.167 },
+	//	{ 75.0295, -128.223 },
+	//	{ 53.1245, 98.3592 },
+	//	{ -96.6363, -32.8554 },
+	//	{ -138.589, -49.7979 },
+	//	{ 121.375, 85.9555 },
+	//	{ 35.4721, 119.267 },
+	//	{ -36.0808, -123.568 },
+	//	{ 79.239, 124.634 },
+	//	{ -75.0994, -123.741 },
+	//	{ 81.9304, 57.959 },
+	//	{ 38.8517, -108.665 },
+	//	{ 107.861, 59.1374 },
+	//	{ 6.97895, 147.25 },
+	//	{ 19.953, 130.249 },
+	//	{ -113.9, -85.11 },
+	//	{ 5.2618, -144.045 },
+	//	{ 7.64954, -148.284 },
+	//	{ -75.0806, -67.1635 },
+	//	{ 124.396, 70.1818 },
+	//	{ 53.0977, 127.602 },
+	//	{ 132.137, -2.14448 },
+	//	{ -115.371, -44.5531 },
+	//	{ -81.5515, 122.99 },
+	//	{ -13.7635, -99.6917 },
+	//};
+
+	std::vector<double> transmissionRanges =
+	{
+		//10,
+		//25,
+		//50,
+		//100,
+		//200,
+		//250,
+		100
+	};
+
+
 	std::vector<double> interferenceRanges =
 	{
 		//10,
@@ -136,7 +204,7 @@ int main()
 		//100,
 		//200,
 		//250,
-		300
+		50
 	};
 
 	std::vector<double> transferTimes =
@@ -154,8 +222,9 @@ int main()
 		//3600.0 * 2,
 		//3600.0 * 10,
 		//3600.0 * 50,
-		3600.0 * 1,
-		3600.0 * 8,
+		3600.0 * 24 * 10,
+		//3600.0 * 1,
+		//3600.0 * 8,
 	};
 
 
@@ -198,7 +267,7 @@ int main()
 	//}
 	
 
-	for (int redo = 0; redo < 1; redo++)
+	for (int redo = 0; redo < 8; redo++)
 	{
 		//for (double transferTime = 30; transferTime <= 30 * 1001; transferTime *= 10)
 		//for (double transferTime = 30; transferTime <= 30 * 50 * 50 * 51; transferTime *= 50)
@@ -251,7 +320,9 @@ int main()
 									//{ 30 * 1, 60 * 1, 10 * 1 },
 									//{ 30 * 1, 10 * 1, 60 * 1 },
 									//{ 10 * 1, 60 * 1, 30 * 1 },
-									{ 10 * 1, 30 * 1, 60 * 1 },
+									//{ 10 * 1, 30 * 1, 60 * 1 },
+									{ 20 * 1, 200 * 1, 2000 * 1 },
+									//{ 5 * 1, 15 * 1, 30 * 1 },
 									//{ 4 },
 								};
 						
@@ -259,30 +330,38 @@ int main()
 								{
 									for (int energyRateIterator = 0; energyRateIterator < energyRateTransfers.size(); energyRateIterator++)
 									{
-										for (auto& interferenceRange : interferenceRanges)
+										for (auto& transmissionRange : transmissionRanges)
 										{
-											WSN::Distribution failDist(failType, currentMean, currentStddev);
-											WSN::SimulationParameters sp =
+											for (auto& interferenceRange : interferenceRanges)
 											{
-												totalDurationToBeTransferred,
-												transferTime,
-												s_RecoveryTime,
-												failDist,
-												{ 50, 100, 150 },
-												//{ 50 },
-												levelSNCount,
-												energyRateWorkings[energyRateIterator],
-												energyRateTransfers[energyRateIterator],
-												200,
-												interferenceRange
-											};
+												for (auto mcrEnabled : MCREnabled)
+												{
+													WSN::Distribution failDist(failType, currentMean, currentStddev);
+													WSN::SimulationParameters sp =
+													{
+														totalDurationToBeTransferred,
+														transferTime,
+														s_RecoveryTime,
+														failDist,
+														{ 50, 100, 150 },
+														//{ 50 },
+														levelSNCount,
+														energyRateWorkings[energyRateIterator],
+														energyRateTransfers[energyRateIterator],
+														transmissionRange,
+														interferenceRange,
+														mcrEnabled
+													};
 
-											WSN::Simulation* Si = new WSN::Simulation(sp);
+													//WSN::Simulation* Si = new WSN::Simulation(sp, SNlocations);
+													WSN::Simulation* Si = new WSN::Simulation(sp);
 
-											Si->Run();
+													Si->Run();
 
-											delete Si;
+													delete Si;
 
+												}
+											}
 										}
 									}
 								}

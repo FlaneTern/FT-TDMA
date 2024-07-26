@@ -53,5 +53,6 @@ namespace WSN
 		int m_CurrentPacketIterator = -1;
 
 		int64_t m_CurrentParent;
+		uint64_t m_CurrentColor;
 	};
 }
